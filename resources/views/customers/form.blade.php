@@ -145,8 +145,8 @@
             if (value) document.getElementById(id).value = value;
         };
         setIfPresent('address', result.display_name);
-        setIfPresent('rt', parts['street_number']);
-        setIfPresent('rw', parts['residential']);
+        setIfPresent('rt', parts.rt);
+        setIfPresent('rw', parts.rw);
         setIfPresent('village', parts.village, parts.suburb, parts.hamlet, parts.town);
         setIfPresent('district', parts.city_district, parts.district, parts.county);
         setIfPresent('city', parts.city, parts.municipality, parts.town, parts.state_district);
