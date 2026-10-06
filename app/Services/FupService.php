@@ -13,10 +13,20 @@ class FupService
     {
     }
 
+    public function currentPeriod(?\Illuminate\Support\Carbon $at = null): string
+    {
+        $date = $at ?: now(config('billing.timezone'));
+        if ((int) $date->format('j') < 10) {
+            $date = $date->copy()->subMonthNoOverflow();
+        }
+
+        return $date->format('Y-m');
+    }
+
     public function collect(): int
     {
         $count = 0;
-        $period = now(config('billing.timezone'))->format('Y-m');
+        $period = $this->currentPeriod();
         $activeMaps = [];
 
         $this->restoreDisabledCustomers($period);
@@ -147,7 +157,7 @@ class FupService
 
     public function resetMonthly(): int
     {
-        $period = now(config('billing.timezone'))->format('Y-m');
+        $period = $this->currentPeriod();
         $affected = 0;
 
         FupState::with('customer.router', 'customer.package')->where('period', '!=', $period)
@@ -163,7 +173,7 @@ class FupService
                                 'total_bytes' => $state->total_bytes,
                                 'profile_before' => $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
                                 'profile_after' => $customer->pppoe_profile_normal ?: $customer->package?->normal_profile,
-                                'details' => 'Kuota FUP direset bulanan; profil normal dipulihkan',
+                                'details' => 'Siklus FUP tanggal 10 dimulai; profil normal dipulihkan',
                                 'created_at' => now(), 'updated_at' => now(),
                             ]);
                         } catch (\Throwable $e) {
@@ -171,8 +181,7 @@ class FupService
                             continue;
                         }
                     }
-                    $state->update(['total_bytes' => 0, 'last_rx' => 0, 'last_tx' => 0, 'limited' => false]);
-                    $affected++;
+                    // Keep the previous cycle totals for history. The new cycle starts with a fresh state row.\n                    if (!$state->limited) {\n                        $affected++;\n                    }
                 }
             });
 
