@@ -181,7 +181,10 @@ class FupService
                             continue;
                         }
                     }
-                    // Keep the previous cycle totals for history. The new cycle starts with a fresh state row.\n                    if (!$state->limited) {\n                        $affected++;\n                    }
+                    // Keep the previous cycle totals for history. The new cycle starts with a fresh state row.
+                    if (!$state->limited) {
+                        $affected++;
+                    }
                 }
             });
 
