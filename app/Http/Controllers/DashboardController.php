@@ -6,11 +6,12 @@ use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Router;
+use App\Services\FupService;
 use Illuminate\Support\Carbon;
 
 class DashboardController extends Controller
 {
-    public function __invoke()
+    public function __invoke(FupService $fupService)
     {
         $now = now(config('billing.timezone'));
         $monthStart = $now->copy()->startOfMonth();
@@ -22,7 +23,7 @@ class DashboardController extends Controller
             return ['label' => Carbon::createFromFormat('Y-m', $period)->translatedFormat('M'), 'period' => $period, 'total' => (int) ($revenueByMonth[$period] ?? 0)];
         });
 
-        return view('dashboard.index', ['stats' => [
+        return view('dashboard.index', ['fupCycle' => $fupService->currentPeriod(), 'stats' => [
             'customers' => Customer::count(),
             'active' => Customer::where('status', 'active')->count(),
             'isolated' => Customer::where('status', 'isolated')->count(),
