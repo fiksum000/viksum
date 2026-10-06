@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\ApiToken;
+use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
@@ -17,6 +18,7 @@ class ManageApiTokens extends Command
         if ($revoke = $this->option('revoke')) {
             $token = ApiToken::find($revoke);
             if (! $token) { $this->error('Token tidak ditemukan.'); return self::FAILURE; }
+            AuditLog::create(['user_id' => $token->user_id, 'action' => 'api_token.revoked', 'entity_type' => ApiToken::class, 'entity_id' => $token->id, 'meta' => ['name' => $token->name]]);
             $token->delete();
             $this->info("Token #{$revoke} sudah dicabut.");
             return self::SUCCESS;
@@ -34,6 +36,7 @@ class ManageApiTokens extends Command
 
         $secret = Str::random(60);
         $token = ApiToken::create(['user_id' => $user->id, 'name' => $name, 'token_hash' => hash('sha256', $secret), 'abilities' => ['read'], 'expires_at' => $days === 0 ? null : now()->addDays($days)]);
+        AuditLog::create(['user_id' => $user->id, 'action' => 'api_token.created', 'entity_type' => ApiToken::class, 'entity_id' => $token->id, 'meta' => ['name' => $name, 'expires_at' => $token->expires_at?->toIso8601String(), 'abilities' => $token->abilities]]);
         $this->newLine();
         $this->warn('Salin token ini sekarang. Token utuh tidak disimpan dan tidak bisa ditampilkan kembali:');
         $this->line($token->id.'|'.$secret);

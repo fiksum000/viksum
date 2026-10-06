@@ -61,7 +61,7 @@ Atur `FONNTE_TOKEN`, pastikan nomor pelanggan sesuai format provider, dan pantau
 
 ### OLT/ONU
 
-Preset inventaris meliputi Hisfocus EPON dan C-Data EPON dengan manajemen Web. Pencatatan status/RX/TX masih manual. Form menyimpan host, port Web, username, dan password terenkripsi; polling/login browser belum diaktifkan karena endpoint dan autentikasi berbeda menurut model/firmware. Minta akses read-only serta uji adapter pada OLT yang dipakai sebelum polling dijadwalkan. Beberapa model C-Data mengiklankan Web, CLI, SNMP, Telnet, dan SSH; fitur persisnya perlu dicocokkan dengan model perangkat Anda ([contoh spesifikasi FD1304E](https://www.cdatatec.com/products/fd1304e-4-port-epon-olt/)).
+Preset inventaris meliputi Hisfocus EPON dan C-Data EPON dengan manajemen Web. Pencatatan status/RX/TX masih manual. Form menyimpan host, port Web, username, dan password terenkripsi; polling/login browser belum diaktifkan karena endpoint dan autentikasi berbeda menurut model/firmware. Minta akses read-only serta uji adapter pada OLT yang dipakai sebelum polling dijadwalkan. Beberapa model C-Data mengiklankan Web, CLI, SNMP, Telnet, dan SSH; fitur persisnya perlu dicocokkan dengan model perangkat Anda ([contoh spesifikasi FD1304E](https://www.cdatatec.com/products/fd1304e-4-port-epon-olt/)). Lihat [docs/olt-epon.md](docs/olt-epon.md) untuk cara mencatat inventory dan batas polling.
 
 ### REST API
 
