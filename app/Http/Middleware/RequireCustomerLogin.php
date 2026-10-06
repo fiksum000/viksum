@@ -17,7 +17,10 @@ class RequireCustomerLogin
             return redirect()->route('portal.login')->with('error', 'Silakan login ke portal pelanggan.');
         }
 
-        $request->attributes->set('billing_customer', $customer);\n        if ($customer->status === 'isolated' && !$request->routeIs('portal.isolated', 'portal.logout')) {\n            return redirect()->route('portal.isolated');\n        }
+        $request->attributes->set('billing_customer', $customer);
+        if ($customer->status === 'isolated' && !$request->routeIs('portal.isolated', 'portal.logout')) {
+            return redirect()->route('portal.isolated');
+        }
         return $next($request);
     }
 }
