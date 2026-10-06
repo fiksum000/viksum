@@ -18,7 +18,10 @@ class BroadcastController extends Controller
             return back()->with('error', 'Aktifkan koneksi Fonnte dan isi API Token di pengaturan WhatsApp terlebih dahulu.');
         }
 
-        $customers = Customer::query()->whereNotNull('phone')->where('phone', '!=', '');
+        $customers = Customer::query()->where(function ($query): void {
+            $query->where(fn ($q) => $q->whereNotNull('whatsapp_number')->where('whatsapp_number', '!=', ''))
+                ->orWhere(fn ($q) => $q->whereNotNull('phone')->where('phone', '!=', ''));
+        });
         if ($data['audience'] === 'active' || $data['audience'] === 'isolated') {
             $customers->where('status', $data['audience']);
         } elseif ($data['audience'] === 'unpaid') {
@@ -27,9 +30,9 @@ class BroadcastController extends Controller
 
         $queued = 0;
         $jobs = [];
-        $customers->select(['id', 'phone'])->orderBy('id')->chunkById(100, function ($batch) use (&$jobs, &$queued, $data): void {
+        $customers->select(['id', 'phone', 'whatsapp_number'])->orderBy('id')->chunkById(100, function ($batch) use (&$jobs, &$queued, $data): void {
             foreach ($batch as $customer) {
-                $jobs[] = new SendWhatsAppMessage($customer->id, $customer->phone, $data['message'], 'broadcast', ['message' => $data['message']]);
+                $jobs[] = new SendWhatsAppMessage($customer->id, $customer->whatsapp_number ?: $customer->phone, $data['message'], 'broadcast', ['message' => $data['message']]);
                 $queued++;
             }
             Bus::batch($jobs)->name('WhatsApp broadcast')->dispatch();
