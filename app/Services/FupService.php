@@ -29,7 +29,7 @@ class FupService
         $period = $this->currentPeriod();
         $activeMaps = [];
 
-        $this->restoreDisabledCustomers($period);
+        $this->restoreDisabledCustomers($period);\n        $this->restoreExpiredCycleStates($period);
 
         Customer::with(['router', 'package'])
             ->where('status', 'active')
@@ -118,7 +118,37 @@ class FupService
         return $count;
     }
 
-    private function restoreDisabledCustomers(string $period): void
+
+    private function restoreExpiredCycleStates(string $period): void
+    {
+        FupState::with(['customer.router', 'customer.package'])
+            ->where('period', '!=', $period)
+            ->where('limited', true)
+            ->chunkById(100, function ($states): void {
+                foreach ($states as $state) {
+                    if (!$state->customer) {
+                        continue;
+                    }
+
+                    try {
+                        $customer = $state->customer;
+                        $this->restoreNormalProfile($customer);
+                        $state->update(['limited' => false]);
+                        DB::table('fup_logs')->insert([
+                            'customer_id' => $customer->id, 'period' => $state->period, 'action' => 'reset',
+                            'total_bytes' => $state->total_bytes,
+                            'profile_before' => $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
+                            'profile_after' => $customer->pppoe_profile_normal ?: $customer->package?->normal_profile,
+                            'details' => 'Profil normal dipulihkan setelah siklus FUP tanggal 10 berganti',
+                            'created_at' => now(), 'updated_at' => now(),
+                        ]);
+                    } catch (\\Throwable $exception) {
+                        report($exception);
+                    }
+                }
+            });
+    }
+\n    private function restoreDisabledCustomers(string $period): void
     {
         FupState::with(['customer.router', 'customer.package'])
             ->where('period', $period)
