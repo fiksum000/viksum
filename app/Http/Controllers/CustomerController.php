@@ -85,7 +85,9 @@ class CustomerController extends Controller
         try {
             $this->syncPppSecret($customer, $routerOs);
             $feedbackKey = 'success';
-            $message = 'Pelanggan ditambahkan dan secret PPP berhasil disimpan di MikroTik.';
+            $message = $customer->service_type === 'pppoe'
+                ? 'Pelanggan ditambahkan dan secret PPP berhasil disimpan di MikroTik.'
+                : 'Pelanggan ditambahkan.';
         } catch (\Throwable $e) {
             Log::warning('Customer PPP secret sync failed', [
                 'customer_id' => $customer->id,
