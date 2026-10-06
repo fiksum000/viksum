@@ -42,6 +42,7 @@
                 @if(in_array($billingUser?->role, ['super_admin','admin','finance'], true))<a class="nav-link" href="{{ route('reports.index') }}">Laporan</a>@endif
                 @if(in_array($billingUser?->role, ['super_admin','admin'], true))<a class="nav-link" href="{{ route('users.index') }}">Pengguna</a>@endif
                 @if(in_array($billingUser?->role, ['super_admin','admin'], true))<a class="nav-link" href="{{ route('whatsapp.index') }}">WhatsApp</a>@endif
+                @if(in_array($billingUser?->role, ['super_admin','admin'], true))<a class="nav-link" href="{{ route('payment-settings.index') }}">Pembayaran</a>@endif
             </div>
             <div class="ms-auto text-white d-flex align-items-center gap-2"><span>{{ $billingUser?->name }}</span><form method="POST" action="{{ route('logout') }}">@csrf<button class="btn btn-sm btn-outline-light">Keluar</button></form></div>
         </div>
