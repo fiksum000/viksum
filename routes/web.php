@@ -83,6 +83,7 @@ Route::middleware('auth.session')->group(function (): void {
         Route::get('/invoices/{invoice}/pdf', InvoicePdfController::class)->name('invoices.pdf');
         Route::post('/invoices/generate', [InvoiceController::class, 'generate'])->middleware('role:super_admin,admin')->name('invoices.generate');
         Route::post('/invoices/{invoice}/pay', [InvoiceController::class, 'pay'])->name('invoices.pay');
+        Route::put('/invoices/{invoice}/adjustments', [InvoiceController::class, 'adjust'])->name('invoices.adjust');
         Route::post('/invoices/{invoice}/manual-payment', [PaymentController::class, 'manual'])->name('invoices.manual-payment');
     });
 });

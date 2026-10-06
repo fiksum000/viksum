@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\{Invoice, Payment};
 use App\Services\{BillingService, TripayService};
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use App\Support\Audit;
 
 class InvoiceController
 {
@@ -42,5 +44,24 @@ class InvoiceController
         $invoice->load(['customer.package', 'payments', 'items']);
         try { $paymentChannels = $tripay->availableChannels(); } catch (\Throwable) { $paymentChannels = []; }
         return view('invoices.show', compact('invoice', 'paymentChannels'));
+    }
+
+    public function adjust(Request $request, Invoice $invoice)
+    {
+        $amounts = $request->validate(['discount' => 'required|integer|min:0', 'penalty' => 'required|integer|min:0']);
+        if ($invoice->status !== 'unpaid') return back()->with('error', 'Hanya invoice belum lunas yang dapat disesuaikan.');
+        if ($invoice->payments()->where('provider', 'tripay')->exists()) return back()->with('error', 'Invoice sudah memiliki transaksi Tripay. Buat penyesuaian sebelum membuat checkout baru.');
+        if ($amounts['discount'] > $invoice->subtotal) return back()->with('error', 'Diskon tidak boleh melebihi subtotal.');
+
+        $updated = DB::transaction(function () use ($invoice, $amounts): bool {
+            $lockedInvoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+            if ($lockedInvoice->status !== 'unpaid' || $amounts['discount'] > $lockedInvoice->subtotal || $lockedInvoice->payments()->where('provider', 'tripay')->exists()) return false;
+            $lockedInvoice->update($amounts + ['total' => $lockedInvoice->subtotal - $amounts['discount'] + $lockedInvoice->tax_amount + $amounts['penalty']]);
+            return true;
+        });
+        if (! $updated) return back()->with('error', 'Status invoice berubah; muat ulang halaman sebelum menyesuaikan.');
+
+        Audit::log('invoice.adjusted', Invoice::class, $invoice->id, $amounts);
+        return back()->with('success', 'Diskon dan denda invoice diperbarui.');
     }
 }

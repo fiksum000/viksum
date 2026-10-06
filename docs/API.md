@@ -41,8 +41,8 @@ Daftar berisi `data` dan metadata halaman (`current_page`, `last_page`, `per_pag
 ## Kode respons
 
 - `200`: berhasil.
-- `401`: token hilang, salah, dicabut, atau kedaluwarsa.
-- `403`: role pemilik berubah/tidak berhak atau izin token tidak sesuai.
+- `401`: token hilang, salah, dicabut, kedaluwarsa, atau pemiliknya bukan admin aktif.
+- `403`: izin token tidak sesuai.
 - `404`: record tidak ditemukan.
 - `422`: filter/parameter tidak valid.
 - `429`: batas permintaan terlampaui.
