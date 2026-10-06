@@ -5,12 +5,23 @@ namespace App\Services;
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\WaLog;
 use App\Models\WaTemplate;
+use App\Models\IntegrationSetting;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use RuntimeException;
 
 class FonnteService
 {
+    public function isConfigured(): bool
+    {
+        $settings = IntegrationSetting::query()->find(1);
+        if ($settings) {
+            return $settings->fonnte_enabled && filled($settings->fonnte_api_token ?: config('services.fonnte.token'));
+        }
+
+        return filled(config('services.fonnte.token'));
+    }
+
     public function queue(?int $customerId, string $target, string $fallbackMessage, string $event = 'manual', array $variables = []): void
     {
         SendWhatsAppMessage::dispatch($customerId, $target, $fallbackMessage, $event, $variables);
@@ -18,7 +29,9 @@ class FonnteService
 
     public function send(?int $customerId, string $target, string $message, string $event = 'manual', array $variables = []): array
     {
-        if (!config('services.fonnte.token')) {
+        $settings = IntegrationSetting::query()->find(1);
+        $token = $settings?->fonnte_api_token ?: config('services.fonnte.token');
+        if (! $this->isConfigured() || ! $token) {
             throw new RuntimeException('FONNTE_TOKEN belum diisi.');
         }
 
@@ -33,7 +46,7 @@ class FonnteService
 
         $payload = ['target' => $target, 'message' => $message, 'delay' => (string) config('services.fonnte.delay')];
         $response = Http::timeout(20)
-            ->withHeaders(['Authorization' => config('services.fonnte.token')])
+            ->withHeaders(['Authorization' => $token])
             ->asForm()
             ->post(config('services.fonnte.url'), $payload);
 
