@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\{AuthController, BroadcastController, CustomerController, CustomerImportExportController, CustomerPortalController, DashboardController, HotspotController, InvoiceController, InvoicePdfController, PackageController, PaymentController, PublicPaymentController, ReportsController, RouterController, UserController, WaTemplateController};
+use App\Http\Controllers\{AuthController, BroadcastController, CustomerController, CustomerImportExportController, CustomerPortalController, DashboardController, DashboardTrafficController, HotspotController, InvoiceController, InvoicePdfController, PackageController, PaymentController, PublicPaymentController, ReportsController, RouterController, UserController, WaTemplateController};
 use App\Http\Controllers\{OltController, OnuController, PaymentSettingsController};
 use Illuminate\Support\Facades\Route;
 
