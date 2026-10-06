@@ -1,66 +1,46 @@
 <!doctype html>
 <html lang="id">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#000000">
-    <title>{{ $title ?? 'Billing RTRW Net' }}</title>
+    <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#050706">
+    <title>{{ $title ?? 'Billing FIKSUM' }}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        :root { color-scheme: dark; }
-        html, body { min-height: 100%; background: #000 !important; color: #f8f9fa; }
-        .navbar { border-bottom: 1px solid #292929; }
-        .card, .table-responsive, .bg-white { background-color: #101010 !important; color: #f8f9fa; border-color: #2b2b2b; }
-        .card { --bs-card-bg: #101010; --bs-card-color: #f8f9fa; --bs-card-border-color: #2b2b2b; }
-        .table { --bs-table-color: #f8f9fa; --bs-table-bg: #101010; --bs-table-border-color: #303030; --bs-table-striped-color: #f8f9fa; --bs-table-striped-bg: #171717; --bs-table-hover-color: #fff; --bs-table-hover-bg: #202020; }
-        .form-control, .form-select { background-color: #111; color: #f8f9fa; border-color: #444; }
-        .form-control:focus, .form-select:focus { background-color: #151515; color: #fff; border-color: #6ea8fe; }
-        .form-control::placeholder { color: #9b9b9b; }
-        .form-select option { background: #111; color: #fff; }
-        .text-muted { color: #adb5bd !important; }
-        .form-text { color: #adb5bd !important; }
-        .alert { --bs-alert-color: #f8f9fa; --bs-alert-bg: #101010; --bs-alert-border-color: #343434; }
-        .alert-secondary { --bs-alert-color: #e9ecef; --bs-alert-bg: #151515; --bs-alert-border-color: #343434; }
-        .alert-success { --bs-alert-color: #b8f3c7; --bs-alert-bg: #102318; --bs-alert-border-color: #245c37; }
-        .alert-danger { --bs-alert-color: #ffc2c7; --bs-alert-bg: #2a1114; --bs-alert-border-color: #71343a; }
-        .alert-warning { --bs-alert-color: #ffe69c; --bs-alert-bg: #2b230d; --bs-alert-border-color: #66551f; }
-        .alert-info { --bs-alert-color: #b6e3f5; --bs-alert-bg: #10232c; --bs-alert-border-color: #28546a; }
-        .dropdown-menu { --bs-dropdown-bg: #111; --bs-dropdown-color: #f8f9fa; --bs-dropdown-link-color: #eee; --bs-dropdown-link-hover-bg: #222; }
-        .modal-content, .list-group-item { background: #101010; color: #f8f9fa; border-color: #303030; }
-        .page-link { background: #101010; color: #d5d5d5; border-color: #303030; }
-        .page-link:hover, .page-item.active .page-link { background: #222; color: #fff; border-color: #555; }
-        .table-responsive { border-radius: .5rem; }
+        :root{color-scheme:dark;--app-bg:#050706;--app-panel:#0d100f;--app-panel-2:#111512;--app-line:#202622;--app-text:#f1f5f1;--app-muted:#9ba7a0;--app-green:#b8f36b;--app-mint:#79d6a6;--bs-body-bg:var(--app-bg);--bs-body-color:var(--app-text);--bs-border-color:#2a322c;--bs-primary:#91c957;--bs-primary-rgb:145,201,87}
+        *{box-sizing:border-box}html,body{min-height:100%;background:var(--app-bg)!important;color:var(--app-text)}body{background-image:radial-gradient(ellipse at 70% -12%,rgba(105,178,93,.08),transparent 36rem);font-size:.94rem}.app-frame{min-height:100vh;display:flex}.app-sidebar{position:sticky;top:0;flex:0 0 252px;width:252px;height:100vh;overflow-y:auto;padding:1rem .85rem;background:rgba(10,13,11,.97);border-right:1px solid var(--app-line)}.brand-lockup{display:flex;align-items:center;gap:.72rem;text-decoration:none;color:#fff;padding:.35rem .45rem 1.35rem}.brand-mark{display:grid;place-items:center;width:39px;height:39px;border-radius:13px;background:var(--app-green);color:#10170d;font-size:1.1rem;font-weight:900}.brand-title{display:block;font-size:.95rem;font-weight:760;letter-spacing:.02em}.brand-subtitle{display:block;color:#89948c;font-size:.65rem;letter-spacing:.14em;text-transform:uppercase}.nav-section-label{padding:.35rem .65rem;margin-bottom:.35rem;color:#768078;font-size:.66rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase}.side-link{min-height:42px;display:flex;align-items:center;gap:.7rem;padding:.6rem .7rem;margin:.16rem 0;border:1px solid transparent;border-radius:11px;color:#b9c2bb;text-decoration:none;font-weight:530;transition:background .15s,border-color .15s,color .15s}.side-link:hover{background:#151a16;color:#f4f8f3}.side-link.active{color:#dcf5c2;background:rgba(184,243,107,.09);border-color:#2b3a25}.side-icon{display:grid;place-items:center;width:24px;color:#8d9b90;font-size:1.07rem}.side-link.active .side-icon{color:var(--app-green)}.sidebar-foot{margin-top:1.5rem;padding:.85rem;border:1px solid #252d27;border-radius:13px;background:#0e120f;color:#919c93;font-size:.74rem;line-height:1.5}.app-main{flex:1;min-width:0}.app-topbar{height:68px;display:flex;align-items:center;gap:1rem;padding:0 clamp(1rem,2.4vw,2.1rem);border-bottom:1px solid var(--app-line);background:rgba(5,7,6,.72);backdrop-filter:blur(16px)}.topbar-context{font-size:.76rem;color:var(--app-muted)}.user-chip{display:flex;align-items:center;gap:.65rem;padding:.35rem .6rem;border:1px solid #262e28;border-radius:999px;background:#0f1310}.user-avatar{width:31px;height:31px;border-radius:50%;display:grid;place-items:center;background:#283322;color:var(--app-green);font-size:.8rem;font-weight:750}.user-name{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem;font-weight:600}.content-wrap{max-width:1680px;margin:0 auto;padding:clamp(1rem,2.3vw,2rem)}.offcanvas{--bs-offcanvas-bg:#0b0e0c;--bs-offcanvas-color:var(--app-text)}.app-mobile-menu{width:min(86vw,300px)!important}.btn-menu{width:40px;height:40px;display:grid;place-items:center;border:1px solid #2c352e;border-radius:11px;background:#101411;color:#e9f1e9}.navbar-toggler-icon{filter:brightness(2)}
+        .card,.table-responsive,.bg-white{background-color:var(--app-panel)!important;color:var(--app-text);border-color:var(--app-line)}.card{--bs-card-bg:var(--app-panel);--bs-card-color:var(--app-text);--bs-card-border-color:var(--app-line);border-radius:14px}.table{--bs-table-color:var(--app-text);--bs-table-bg:var(--app-panel);--bs-table-border-color:#242b26;--bs-table-striped-color:var(--app-text);--bs-table-striped-bg:#111512;--bs-table-hover-color:#fff;--bs-table-hover-bg:#171d18}.table thead th{color:#a9b5ab;font-size:.73rem;font-weight:650;text-transform:uppercase;letter-spacing:.055em;white-space:nowrap}.table-responsive{border:1px solid var(--app-line);border-radius:14px;overflow-x:auto}.form-control,.form-select{min-height:42px;background-color:#090c0a;color:#f4f7f4;border:1px solid #303832;border-radius:10px}.form-control:focus,.form-select:focus{background-color:#0b0f0c;color:#fff;border-color:#8bc15a;box-shadow:0 0 0 .2rem rgba(184,243,107,.12)}.form-control::placeholder{color:#778178}.form-select option{background:#101411;color:#fff}.form-check-input{background-color:#090c0a;border-color:#4b584d}.form-check-input:checked{background-color:#91c957;border-color:#91c957}.text-muted,.form-text{color:#9ba7a0!important}.btn{border-radius:10px;font-weight:580}.btn-primary{--bs-btn-bg:#b8f36b;--bs-btn-border-color:#b8f36b;--bs-btn-color:#11180e;--bs-btn-hover-bg:#c8fa83;--bs-btn-hover-border-color:#c8fa83;--bs-btn-hover-color:#11180e;--bs-btn-active-bg:#9bd254;--bs-btn-active-border-color:#9bd254}.btn-outline-primary{--bs-btn-color:#c5e9a3;--bs-btn-border-color:#536747;--bs-btn-hover-bg:#192116;--bs-btn-hover-border-color:#8bc15a;--bs-btn-hover-color:#eaffd9}.btn-outline-secondary,.btn-outline-light{--bs-btn-color:#d4ddd5;--bs-btn-border-color:#39433b;--bs-btn-hover-bg:#1a201b;--bs-btn-hover-border-color:#69786c;--bs-btn-hover-color:#fff}.alert{--bs-alert-color:#f1f5f1;--bs-alert-bg:#101512;--bs-alert-border-color:#303932;border-radius:12px}.alert-secondary{--bs-alert-color:#e9ecef;--bs-alert-bg:#151a16;--bs-alert-border-color:#343c35}.alert-success{--bs-alert-color:#b8f3c7;--bs-alert-bg:#102318;--bs-alert-border-color:#245c37}.alert-danger{--bs-alert-color:#ffc2c7;--bs-alert-bg:#2a1114;--bs-alert-border-color:#71343a}.alert-warning{--bs-alert-color:#ffe69c;--bs-alert-bg:#2b230d;--bs-alert-border-color:#66551f}.alert-info{--bs-alert-color:#b6e3f5;--bs-alert-bg:#10232c;--bs-alert-border-color:#28546a}.dropdown-menu{--bs-dropdown-bg:#111512;--bs-dropdown-color:#f8f9fa;--bs-dropdown-link-color:#eee;--bs-dropdown-link-hover-bg:#222}.modal-content,.list-group-item{background:#101411;color:#f8f9fa;border-color:#303932}.page-link{background:#0f130f;color:#d5ddd6;border-color:#303832}.page-link:hover,.page-item.active .page-link{background:#202a21;color:#fff;border-color:#536747}.badge.text-bg-success{background:#21432d!important;color:#c6f5d0!important}.badge.text-bg-danger{background:#4a2328!important;color:#ffd0d3!important}.badge.text-bg-secondary{background:#303833!important;color:#e2e8e3!important}.shadow,.shadow-sm{box-shadow:0 14px 36px rgba(0,0,0,.18)!important}
+        @media(max-width:991.98px){.app-sidebar{display:none}.content-wrap{padding:1rem}.app-topbar{height:62px;padding:0 1rem}}
     </style>
 </head>
 <body>
-<nav class="navbar navbar-expand-lg bg-dark navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="{{ route('dashboard') }}">Billing RTRW Net</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Buka navigasi"><span class="navbar-toggler-icon"></span></button>
-        <div class="collapse navbar-collapse" id="mainNav">
-            <div class="navbar-nav">
-                <a class="nav-link" href="{{ route('dashboard') }}">Dashboard</a>
-                @if(in_array($billingUser?->role, ['super_admin','admin','operator','technician'], true))<a class="nav-link" href="{{ route('customers.index') }}">Pelanggan</a>@endif
-                @if(in_array($billingUser?->role, ['super_admin','admin'], true))<a class="nav-link" href="{{ route('packages.index') }}">Paket</a>@endif
-                @if(in_array($billingUser?->role, ['super_admin','admin','technician'], true))<a class="nav-link" href="{{ route('routers.index') }}">MikroTik</a>@endif
-                @if(in_array($billingUser?->role, ['super_admin','admin','technician'], true))<a class="nav-link" href="{{ route('olts.index') }}">OLT</a><a class="nav-link" href="{{ route('onus.index') }}">ONU</a>@endif
-                @if(in_array($billingUser?->role, ['super_admin','admin','technician'], true))<a class="nav-link" href="{{ route('hotspot.index') }}">Hotspot</a>@endif
-                @if(in_array($billingUser?->role, ['super_admin','admin','finance'], true))<a class="nav-link" href="{{ route('invoices.index') }}">Invoice</a>@endif
-                @if(in_array($billingUser?->role, ['super_admin','admin','finance'], true))<a class="nav-link" href="{{ route('reports.index') }}">Laporan</a>@endif
-                @if(in_array($billingUser?->role, ['super_admin','admin'], true))<a class="nav-link" href="{{ route('users.index') }}">Pengguna</a>@endif
-                @if(in_array($billingUser?->role, ['super_admin','admin'], true))<a class="nav-link" href="{{ route('whatsapp.index') }}">WhatsApp</a>@endif
-                @if(in_array($billingUser?->role, ['super_admin','admin'], true))<a class="nav-link" href="{{ route('payment-settings.index') }}">Pembayaran</a>@endif
+<div class="app-frame">
+    <aside class="app-sidebar d-none d-lg-flex flex-column">
+        <a class="brand-lockup" href="{{ route('dashboard') }}"><span class="brand-mark">F</span><span><span class="brand-title">FIKSUM</span><span class="brand-subtitle">Internet Billing</span></span></a>
+        @include('layouts.navigation')
+        <div class="sidebar-foot mt-auto">Billing RTRW Net<br><span class="text-secondary">Kelola pelanggan dan jaringan Anda.</span></div>
+    </aside>
+    <div class="app-main">
+        <header class="app-topbar">
+            <button class="btn-menu d-lg-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileNavigation" aria-controls="mobileNavigation" aria-label="Buka menu">☰</button>
+            <div class="d-none d-sm-block"><div class="fw-semibold">Billing FIKSUM</div><div class="topbar-context">Sistem manajemen pelanggan internet</div></div>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <div class="user-chip"><span class="user-avatar">{{ mb_strtoupper(mb_substr($billingUser?->name ?? 'U', 0, 1)) }}</span><span class="user-name">{{ $billingUser?->name }}</span></div>
+                <form method="POST" action="{{ route('logout') }}">@csrf<button class="btn btn-sm btn-outline-secondary">Keluar</button></form>
             </div>
-            <div class="ms-auto text-white d-flex align-items-center gap-2"><span>{{ $billingUser?->name }}</span><form method="POST" action="{{ route('logout') }}">@csrf<button class="btn btn-sm btn-outline-light">Keluar</button></form></div>
-        </div>
+        </header>
+        <main class="content-wrap">
+            @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
+            @if(session('error'))<div class="alert alert-danger">{{ session('error') }}</div>@endif
+            @if(session('warning'))<div class="alert alert-warning">{{ session('warning') }}</div>@endif
+            @if($errors->any())<div class="alert alert-danger"><ul class="mb-0">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
+            @yield('content')
+        </main>
     </div>
-</nav>
-<main class="container-fluid py-4">
-    @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
-    @if(session('error'))<div class="alert alert-danger">{{ session('error') }}</div>@endif
-    @if($errors->any())<div class="alert alert-danger"><ul class="mb-0">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul></div>@endif
-    @yield('content')
-</main>
+</div>
+<div class="offcanvas offcanvas-start app-mobile-menu" tabindex="-1" id="mobileNavigation" aria-labelledby="mobileNavigationLabel">
+    <div class="offcanvas-header"><a class="brand-lockup py-0" href="{{ route('dashboard') }}"><span class="brand-mark">F</span><span><span class="brand-title">FIKSUM</span><span class="brand-subtitle">Internet Billing</span></span></a><button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Tutup"></button></div>
+    <div class="offcanvas-body d-flex flex-column">@include('layouts.navigation')<div class="sidebar-foot mt-auto">Billing RTRW Net<br><span class="text-secondary">{{ $billingUser?->name }}</span></div></div>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
+
