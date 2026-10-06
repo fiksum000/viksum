@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\Package;
 use App\Models\Router;
 use App\Support\Audit;
+use App\Support\WhatsappNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -50,7 +51,9 @@ class CustomerImportExportController
         }
 
         $count = 0;
-        DB::transaction(function () use ($rows, $headers, &$count): void {
+        $duplicateWhatsapp = 0;
+        $invalidWhatsapp = 0;
+        DB::transaction(function () use ($rows, $headers, &$count, &$duplicateWhatsapp, &$invalidWhatsapp): void {
             foreach ($rows as $row) {
                 $data = [];
                 foreach ($headers as $index => $header) {
@@ -64,6 +67,17 @@ class CustomerImportExportController
                 }
 
                 $code = trim((string) ($data['customer_code'] ?? '')) ?: 'MHM-'.$username;
+                $whatsapp = WhatsappNumber::normalize($data['whatsapp_number'] ?? null);
+                if (!WhatsappNumber::isValid($whatsapp)) {
+                    $invalidWhatsapp++;
+                    continue;
+                }
+                if ($whatsapp !== null && Customer::where('whatsapp_number', $whatsapp)
+                    ->where('customer_code', '!=', $code)->exists()) {
+                    $duplicateWhatsapp++;
+                    continue;
+                }
+
                 $package = !empty($data['package']) ? Package::where('name', $data['package'])->first() : null;
                 $router = !empty($data['router']) ? Router::where('name', $data['router'])->first() : null;
                 $service = strtolower((string) ($data['service_type'] ?? 'pppoe'));
@@ -74,7 +88,7 @@ class CustomerImportExportController
                 $attributes = [
                     'name' => trim((string) ($data['name'] ?? '')) ?: $username,
                     'phone' => $data['phone'] ?? null,
-                    'whatsapp_number' => $data['whatsapp_number'] ?? null,
+                    'whatsapp_number' => $whatsapp,
                     'email' => $data['email'] ?? null,
                     'address' => $data['address'] ?? null,
                     'rt' => $data['rt'] ?? null,
@@ -104,7 +118,12 @@ class CustomerImportExportController
         });
 
         Audit::log('customers.imported', Customer::class, null, ['count' => $count, 'format' => 'xlsx/csv/mikhmon']);
-        return back()->with('success', "{$count} pelanggan berhasil diimpor.");
+        $message = "{$count} pelanggan berhasil diimpor.";
+        if ($duplicateWhatsapp > 0 || $invalidWhatsapp > 0) {
+            $message .= " {$duplicateWhatsapp} baris duplikat dan {$invalidWhatsapp} nomor tidak valid dilewati.";
+        }
+
+        return back()->with('success', $message);
     }
 
     public function export()
@@ -137,3 +156,4 @@ class CustomerImportExportController
         return null;
     }
 }
+
