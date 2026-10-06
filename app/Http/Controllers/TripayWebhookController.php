@@ -75,7 +75,10 @@ class TripayWebhookController
                 }
 
                 $payment = Payment::where('reference', $reference)->lockForUpdate()->first();
-                if ($invoice->payment_reference && !hash_equals((string) $invoice->payment_reference, $reference)) {
+                if ($payment && $payment->invoice_id !== $invoice->id) {
+                    throw new \RuntimeException('Payment reference belongs to another invoice');
+                }
+                if (!$payment && $invoice->payment_reference && !hash_equals((string) $invoice->payment_reference, $reference)) {
                     throw new \RuntimeException('Payment reference does not match invoice');
                 }
 

@@ -1,7 +1,7 @@
 services:
   app:
     build: .
-    ports: ["8000:8000"]
+    ports: ["127.0.0.1:8000:8000"]
     environment:
       APP_ENV: production
       APP_DEBUG: "false"
@@ -12,12 +12,14 @@ services:
       DB_PORT: 3306
       DB_DATABASE: billing_rtrwnet
       DB_USERNAME: billing
-      DB_PASSWORD: ${DB_PASSWORD:-billing-secret}
+      DB_PASSWORD: ${DB_PASSWORD:?Set a strong DB_PASSWORD in .env}
       SESSION_DRIVER: database
       CACHE_STORE: database
       QUEUE_CONNECTION: database
       APP_TIMEZONE: Asia/Jakarta
-    depends_on: [db]
+    depends_on:
+      db:
+        condition: service_healthy
   scheduler:
     build: .
     command: php artisan schedule:work
@@ -31,24 +33,33 @@ services:
       DB_PORT: 3306
       DB_DATABASE: billing_rtrwnet
       DB_USERNAME: billing
-      DB_PASSWORD: ${DB_PASSWORD:-billing-secret}
+      DB_PASSWORD: ${DB_PASSWORD:?Set a strong DB_PASSWORD in .env}
       SESSION_DRIVER: database
       CACHE_STORE: database
       QUEUE_CONNECTION: database
       APP_TIMEZONE: Asia/Jakarta
-    depends_on: [db]
+    depends_on:
+      db:
+        condition: service_healthy
   queue:
     build: .
     command: php artisan queue:work --tries=3 --backoff=10
     environment: *app_env
-    depends_on: [db]
+    depends_on:
+      db:
+        condition: service_healthy
   db:
     image: mariadb:10.11
     environment:
       MARIADB_DATABASE: billing_rtrwnet
       MARIADB_USER: billing
-      MARIADB_PASSWORD: ${DB_PASSWORD:-billing-secret}
-      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root-secret}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Set a strong DB_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set a strong DB_ROOT_PASSWORD in .env}
     volumes: ["dbdata:/var/lib/mysql"]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 volumes:
   dbdata:

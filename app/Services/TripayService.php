@@ -1,6 +1,8 @@
 <?php
 namespace App\Services;
+use App\Models\{Invoice,Payment};
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
 class TripayService {
@@ -24,4 +26,21 @@ class TripayService {
     $r=Http::timeout(20)->withHeaders($this->headers())->asForm()->post($this->baseUrl().'/transaction/create',$payload); if($r->failed())throw new RuntimeException('Tripay HTTP error: '.$r->body()); $json=$r->json(); if(!($json['success']??false))throw new RuntimeException('Tripay: '.($json['message']??'Unknown error')); return $json['data']??[];
   }
   public function verifyCallbackSignature(string $raw,?string $signature):bool{if(!$signature)return false;$expected=hash_hmac('sha256',$raw,(string)config('services.tripay.private_key'));return hash_equals($expected,$signature);}
+  public function createInvoiceCheckout(Invoice $invoice,string $method):Payment{
+    return DB::transaction(function()use($invoice,$method):Payment{
+      $locked=Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+      if($locked->status!=='unpaid')throw new RuntimeException('Invoice tidak dalam status belum bayar.');
+      $existing=$locked->payments()->where('provider','tripay')->where('reference',$locked->payment_reference)->whereIn('status',['unpaid','pending'])->whereNotNull('checkout_url')->first();
+      if($existing&&$locked->payment_expired_at&&$locked->payment_expired_at->isFuture())return $existing;
+      $this->assertAvailableChannel($method);
+      $customer=$locked->customer;
+      $data=$this->createTransaction($method,$locked->invoice_number,$customer->name,$customer->email??'',$locked->total,$customer->phone??'');
+      $reference=(string)($data['reference']??''); $checkoutUrl=(string)($data['checkout_url']??'');
+      if($reference===''||$checkoutUrl==='')throw new RuntimeException('Tripay tidak mengembalikan reference dan checkout URL yang diperlukan.');
+      if(isset($data['amount'])&&(int)$data['amount']!==(int)$locked->total)throw new RuntimeException('Nominal transaksi Tripay tidak sama dengan invoice.');
+      $payment=Payment::create(['invoice_id'=>$locked->id,'provider'=>'tripay','reference'=>$reference,'merchant_ref'=>$locked->invoice_number,'channel'=>$method,'amount'=>$locked->total,'status'=>'unpaid','checkout_url'=>$checkoutUrl,'raw_payload'=>$data]);
+      $locked->update(['payment_url'=>$checkoutUrl,'payment_reference'=>$reference,'payment_expired_at'=>isset($data['expired_time'])?\Carbon\Carbon::createFromTimestamp($data['expired_time']):null]);
+      return $payment;
+    });
+  }
 }

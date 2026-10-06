@@ -45,6 +45,8 @@ sudo systemctl restart billing-rtrwnet-worker billing-rtrwnet-scheduler
 
 Lihat [DEPLOY_CHECKLIST.md](DEPLOY_CHECKLIST.md) untuk verifikasi produksi dan [GITHUB.md](GITHUB.md) untuk proses repository.
 
+File Docker disediakan hanya untuk pengembangan lokal. Compose mewajibkan password database yang diisi sendiri dan hanya membuka port aplikasi di localhost. Untuk layanan produksi pada CT Proxmox, gunakan installer Ubuntu di atas agar aplikasi berjalan lewat Nginx, PHP-FPM, worker, scheduler, dan backup systemd.
+
 ## Integrasi
 
 ### Tripay
