@@ -4,6 +4,7 @@
 
 - [ ] Ubuntu Server 22.04 LTS; tetapkan IP dan DNS yang stabil.
 - [ ] Ikuti [README.md](README.md): clone repo di `/var/www/billing-rtrwnet`, jalankan installer dengan sudo, set password awal yang kuat.
+- [ ] Karena GitHub repository private, gunakan deploy key SSH khusus CT dengan akses baca-saja; jangan taruh private key atau PAT di repository.
 - [ ] Laravel 13 memakai PHP 8.4 (PHP 8.2 tidak kompatibel), Composer 2, MariaDB, Nginx, PHP-FPM.
 - [ ] Pastikan `APP_DEBUG=false`, `APP_URL` tepat, permission storage/cache benar, dan HTTPS aktif sebelum membuka ke internet.
 - [ ] Periksa worker, scheduler, backup timer, log Laravel, dan `systemctl status`.

@@ -24,13 +24,20 @@ Aplikasi billing mandiri untuk layanan RT/RW Net, dibangun dengan Laravel 13, PH
 
 ## Deploy ke CT Ubuntu Proxmox
 
-Buat CT Ubuntu 22.04 dengan jaringan/IP yang sudah ditentukan, lalu masuk ke CT sebagai user sudo. Atur DNS dan akses HTTPS sebelum mengaktifkan webhook Tripay.
+Buat CT Ubuntu 22.04 dengan jaringan/IP yang sudah ditentukan, lalu masuk ke CT sebagai user codex-deploy yang memiliki hak sudo. Repository GitHub ini private, jadi tambahkan SSH deploy key khusus CT dengan akses baca-saja sebelum clone:
+
+```bash
+sudo -iu codex-deploy ssh-keygen -t ed25519 -C "billing-ct108"
+sudo -iu codex-deploy sh -lc 'cat ~/.ssh/id_ed25519.pub'
+```
+
+Tambahkan public key tersebut di GitHub repository Settings → Deploy keys tanpa mencentang akses tulis. Jangan unggah private key. Setelah SSH ke GitHub terverifikasi dari CT, lanjutkan:
 
 ```bash
 sudo apt update && sudo apt install -y git
 sudo mkdir -p /var/www/billing-rtrwnet
-sudo chown "$USER":"$USER" /var/www/billing-rtrwnet
-git clone https://github.com/fiksum000/viksum.git /var/www/billing-rtrwnet
+sudo chown codex-deploy:codex-deploy /var/www/billing-rtrwnet
+git clone git@github.com:fiksum000/viksum.git /var/www/billing-rtrwnet
 cd /var/www/billing-rtrwnet
 bash scripts/install.sh
 ```
