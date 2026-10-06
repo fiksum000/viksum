@@ -15,7 +15,7 @@ class RouterController extends Controller { public function index()
 # Profile ISOLIR menandai IP pelanggan terisolir pada address-list
 :local isolirProfile [/ppp profile find where name="__ISOLATION_PROFILE__"]
 :if ([:len $isolirProfile] = 0) do={
-    /ppp profile add name="__ISOLATION_PROFILE__" address-list="FIKSUM-ISOLIR" rate-limit=64k/64k
+    /ppp profile add copy-from=default name="__ISOLATION_PROFILE__" address-list="FIKSUM-ISOLIR" rate-limit=64k/64k
 } else={
     /ppp profile set $isolirProfile address-list="FIKSUM-ISOLIR"
 }
