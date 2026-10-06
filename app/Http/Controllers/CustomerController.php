@@ -165,7 +165,7 @@ class CustomerController extends Controller
 
     private function syncPppSecret(Customer $customer, RouterOsService $routerOs, ?string $previousUsername = null): void
     {
-        if ($customer->service_type !== 'pppoe') {
+        if ($customer->service_type !== 'pppoe' || $customer->status === 'trial') {
             return;
         }
         if (!$customer->router_id || !$customer->router) {
@@ -212,6 +212,9 @@ class CustomerController extends Controller
     {
         $creating = !$customer || !$customer->exists;
         $service = $r->input('service_type');
+        $status = $r->input('status');
+        $needsPppSetup = $service === 'pppoe' && $status !== 'trial';
+        $needsPppPassword = $needsPppSetup && ($creating || ($customer?->status === 'trial' && blank($customer?->pppoe_password)));
         $rawWhatsapp = $r->input('whatsapp_number');
         $normalizedWhatsapp = WhatsappNumber::normalize(is_string($rawWhatsapp) ? $rawWhatsapp : null);
         $r->merge(['whatsapp_number' => filled($rawWhatsapp) && blank($normalizedWhatsapp) ? 'invalid' : $normalizedWhatsapp]);
@@ -245,10 +248,10 @@ class CustomerController extends Controller
             'due_day' => 'required|integer|min:1|max:28',
             'grace_days' => 'nullable|integer|min:0|max:31',
             'activated_at' => 'nullable|date',
-            'router_id' => [$service === 'pppoe' ? 'required' : 'nullable', 'exists:routers,id'],
+            'router_id' => [$needsPppSetup ? 'required' : 'nullable', 'exists:routers,id'],
             'package_id' => [$creating ? 'required' : 'nullable', 'exists:packages,id'],
-            'pppoe_username' => [$service === 'pppoe' ? 'required' : 'nullable', 'max:120', Rule::unique('customers', 'pppoe_username')->ignore($customer?->id)],
-            'pppoe_password' => [$service === 'pppoe' && $creating ? 'required' : 'nullable', 'string', 'max:255'],
+            'pppoe_username' => [$needsPppSetup ? 'required' : 'nullable', 'max:120', Rule::unique('customers', 'pppoe_username')->ignore($customer?->id)],
+            'pppoe_password' => [$needsPppPassword ? 'required' : 'nullable', 'string', 'max:255'],
             'pppoe_ip' => 'nullable|ip',
             'pppoe_mac' => 'nullable|mac_address',
             'pppoe_profile_normal' => 'nullable|max:120',

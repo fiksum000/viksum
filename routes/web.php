@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\{AuthController, BroadcastController, CustomerController, CustomerImportExportController, CustomerPortalController, DashboardController, DashboardTrafficController, HotspotController, InvoiceController, InvoicePdfController, PackageController, PaymentController, PublicPaymentController, ReportsController, RouterController, UserController, WaTemplateController};
+use App\Http\Controllers\{AuthController, BroadcastController, CustomerController, CustomerImportExportController, CustomerPortalController, DashboardController, DashboardTrafficController, HotspotController, InvoiceController, InvoicePdfController, PackageController, PaymentController, PublicPaymentController, PublicRegistrationController, ReportsController, RouterController, UserController, WaTemplateController};
 use App\Http\Controllers\{OltController, OnuController, PaymentSettingsController};
 use Illuminate\Support\Facades\Route;
 
@@ -11,6 +11,9 @@ Route::post('/pay/{token}', [PublicPaymentController::class, 'create'])->middlew
 Route::get('/isolir', fn () => response()->view('public.isolation')->header('Cache-Control', 'no-store, private'))->middleware('throttle:60,1')->name('public.isolated');
 Route::get('/portal/login', [CustomerPortalController::class, 'loginForm'])->name('portal.login');
 Route::post('/portal/login', [CustomerPortalController::class, 'login'])->middleware('throttle:10,1')->name('portal.login.submit');
+Route::get('/register', [PublicRegistrationController::class, 'create'])->middleware('throttle:30,1')->name('register.create');
+Route::post('/register', [PublicRegistrationController::class, 'store'])->middleware('throttle:5,1')->name('register.store');
+Route::get('/register/complete', [PublicRegistrationController::class, 'complete'])->name('register.complete');
 Route::middleware('customer.session')->prefix('/portal')->name('portal.')->group(function (): void {
     Route::get('/', [CustomerPortalController::class, 'home'])->name('home');
     Route::get('/isolir', [CustomerPortalController::class, 'isolated'])->name('isolated');
