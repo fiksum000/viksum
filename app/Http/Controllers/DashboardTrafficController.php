@@ -10,15 +10,47 @@ class DashboardTrafficController extends Controller
 {
     public function __invoke(RouterOsService $routerOs): JsonResponse
     {
-        $samples = Router::where('enabled', true)->orderBy('name')->get()->map(function (Router $router) use ($routerOs): array {
-            try {
-                return ['router_id' => $router->id, 'router' => $router->name, ...$routerOs->interfaceTraffic($router), 'ok' => true];
-            } catch (\Throwable $exception) {
-                report($exception);
-                return ['router_id' => $router->id, 'router' => $router->name, 'interface' => $router->traffic_interface, 'rx_bps' => null, 'tx_bps' => null, 'ok' => false];
-            }
-        });
+        $routerName = trim((string) config('billing.traffic_monitor_router'));
+        if ($routerName === '') {
+            return $this->emptySample();
+        }
 
-        return response()->json(['sampled_at' => now(config('billing.timezone'))->toIso8601String(), 'routers' => $samples]);
+        $router = Router::where('name', $routerName)->where('enabled', true)->first();
+        if (!$router) {
+            return $this->emptySample();
+        }
+
+        try {
+            $sample = [
+                'router_id' => $router->id,
+                'router' => $router->name,
+                ...$routerOs->interfaceTraffic($router),
+                'ok' => true,
+            ];
+        } catch (\Throwable $exception) {
+            report($exception);
+            $sample = [
+                'router_id' => $router->id,
+                'router' => $router->name,
+                'interface' => $router->traffic_interface,
+                'rx_bps' => null,
+                'tx_bps' => null,
+                'ok' => false,
+            ];
+        }
+
+        return response()->json([
+            'sampled_at' => now(config('billing.timezone'))->toIso8601String(),
+            'routers' => [$sample],
+        ])->header('Cache-Control', 'no-store, private');
+    }
+
+    private function emptySample(): JsonResponse
+    {
+        return response()->json([
+            'sampled_at' => now(config('billing.timezone'))->toIso8601String(),
+            'routers' => [],
+        ])->header('Cache-Control', 'no-store, private');
     }
 }
+

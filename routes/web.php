@@ -22,7 +22,7 @@ Route::middleware('customer.session')->prefix('/portal')->name('portal.')->group
 Route::middleware('auth.session')->group(function (): void {
     Route::get('/', fn () => redirect()->route('dashboard'));
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
-    Route::get('/dashboard/traffic', DashboardTrafficController::class)->middleware('throttle:10,1')->name('dashboard.traffic');
+    Route::get('/dashboard/traffic', DashboardTrafficController::class)->middleware(['role:super_admin,admin,technician', 'throttle:10,1'])->name('dashboard.traffic');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     Route::middleware('role:super_admin,admin,operator,technician')->group(function (): void {
@@ -94,3 +94,4 @@ Route::middleware('auth.session')->group(function (): void {
         Route::post('/invoices/{invoice}/manual-payment', [PaymentController::class, 'manual'])->name('invoices.manual-payment');
     });
 });
+
