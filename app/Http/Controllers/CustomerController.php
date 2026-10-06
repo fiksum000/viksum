@@ -1,13 +1,263 @@
 <?php
 namespace App\Http\Controllers;
-use App\Models\{Customer,FupState,Onu,Package,Router}; use App\Support\Audit; use App\Services\FupService; use Illuminate\Http\Request; use Illuminate\Validation\Rule; use Illuminate\Support\Facades\DB;
-class CustomerController extends Controller {
-  public function index(Request $r){$q=Customer::with(['package','router'])->when($r->search,fn($x,$v)=>$x->where(fn($q)=>$q->where('name','like','%'.$v.'%')->orWhere('customer_code','like','%'.$v.'%')->orWhere('pppoe_username','like','%'.$v.'%')->orWhere('phone','like','%'.$v.'%')->orWhere('whatsapp_number','like','%'.$v.'%')))->when($r->status,fn($x,$v)=>$x->where('status',$v))->latest()->paginate(25)->withQueryString();return view('customers.index',['customers'=>$q]);}
-  private function formData(Customer $customer): array { return ['customer'=>$customer,'packages'=>Package::orderBy('name')->get(),'routers'=>Router::orderBy('name')->get(),'onus'=>Onu::with('olt')->where(function($q)use($customer){$q->whereNull('customer_id');if($customer->exists)$q->orWhere('customer_id',$customer->id);})->orderBy('olt_id')->orderBy('pon_port')->get(),'fupState'=>$customer->exists?FupState::where('customer_id',$customer->id)->where('period',app(\App\Services\FupService::class)->currentPeriod())->first():null]; }
-  public function create(){return view('customers.form',$this->formData(new Customer));}
-  public function store(Request $r){$data=$this->validated($r);$onuId=$data['onu_record_id']??null;unset($data['onu_record_id']);$c=DB::transaction(function()use($data,$onuId){$c=Customer::create($data);$c->pppoe_profile_normal=$c->pppoe_profile_normal?:$c->package?->normal_profile;$c->save();$this->syncOnu($c,$onuId);return $c;});Audit::log('customer.created',Customer::class,$c->id,['code'=>$c->customer_code]);return redirect()->route('customers.index')->with('success','Pelanggan ditambahkan.');}
-  public function edit(Customer $customer){return view('customers.form',$this->formData($customer));}
-  public function update(Request $r,Customer $customer){$data=$this->validated($r,$customer);$onuId=$data['onu_record_id']??null;unset($data['onu_record_id']);foreach(['pppoe_password','hotspot_password','portal_password','ktp_number','npwp'] as $secret){if(blank($data[$secret]??null))unset($data[$secret]);}DB::transaction(function()use($customer,$data,$onuId){$customer->update($data);if(!$customer->pppoe_profile_normal)$customer->update(['pppoe_profile_normal'=>$customer->package?->normal_profile]);$this->syncOnu($customer,$onuId);});Audit::log('customer.updated',Customer::class,$customer->id);return redirect()->route('customers.index')->with('success','Pelanggan diperbarui.');}
-  private function syncOnu(Customer $customer,?int $onuId):void { $onuId=$onuId?(int)$onuId:null;$previous=$customer->onu;if($previous&&$previous->id!==$onuId)$previous->update(['customer_id'=>null]);if(!$onuId){$customer->update(['olt_id'=>null]);return;}$onu=Onu::with('olt')->lockForUpdate()->findOrFail($onuId);if($onu->customer_id&&$onu->customer_id!==$customer->id)throw new \RuntimeException('ONU sudah terhubung ke pelanggan lain.');$onu->update(['customer_id'=>$customer->id]);$customer->update(['olt_id'=>$onu->olt_id,'olt_name'=>$onu->olt?->name,'pon_port'=>$onu->pon_port,'onu_id'=>$onu->onu_id,'onu_sn'=>$onu->serial_number]); }
-  private function validated(Request $r,?Customer $c=null):array{$creating=!$c||!$c->exists;$service=$r->input('service_type');$data=$r->validate(['customer_code'=>[$creating?'nullable':'required','max:50',Rule::unique('customers','customer_code')->ignore($c?->id)],'name'=>'required|max:120','phone'=>'nullable|max:30','whatsapp_number'=>'nullable|max:30','email'=>'nullable|email|max:255','area'=>[$creating?'required':'nullable','max:120'],'address'=>'nullable','rt'=>'nullable|max:10','rw'=>'nullable|max:10','village'=>'nullable|max:120','district'=>'nullable|max:120','city'=>'nullable|max:120','latitude'=>'nullable|numeric|between:-90,90','longitude'=>'nullable|numeric|between:-180,180','ktp_number'=>'nullable|max:50','npwp'=>'nullable|max:50','registered_at'=>'nullable|date','modem_device'=>'nullable|max:120','source_port'=>'nullable|max:120','notes'=>'nullable|max:5000','service_type'=>'required|in:pppoe,hotspot','status'=>'required|in:active,isolated,suspended,terminated,trial','due_day'=>'required|integer|min:1|max:28','grace_days'=>'nullable|integer|min:0|max:31','activated_at'=>'nullable|date','router_id'=>'nullable|exists:routers,id','package_id'=>[$creating?'required':'nullable','exists:packages,id'],'pppoe_username'=>[$service==='pppoe'?'required':'nullable','max:120',Rule::unique('customers','pppoe_username')->ignore($c?->id)],'pppoe_password'=>[$service==='pppoe'&&$creating?'required':'nullable','string','max:255'],'pppoe_ip'=>'nullable|ip','pppoe_mac'=>'nullable|mac_address','pppoe_profile_normal'=>'nullable|max:120','pppoe_profile_isolir'=>'nullable|max:120','hotspot_username'=>[$service==='hotspot'?'required':'nullable','max:120',Rule::unique('customers','hotspot_username')->ignore($c?->id)],'hotspot_password'=>[$service==='hotspot'&&$creating?'required':'nullable','string','max:255'],'olt_name'=>'nullable|max:120','pon_port'=>'nullable|max:50','onu_id'=>'nullable|max:50','onu_sn'=>'nullable|max:100','onu_record_id'=>['nullable','exists:onus,id',Rule::exists('onus','id')->where(fn($q)=>$q->whereNull('customer_id')->orWhere('customer_id',$c?->id))],'fup_mode'=>'required|in:inherit,on,off','fup_limit_gb'=>'nullable|numeric|min:0|max:100000','fup_speed_after'=>'nullable|max:50','is_auto_isolate'=>'nullable|boolean','portal_password'=>'nullable|string|min:8|max:255']);if($creating&&!$data['customer_code'])$data['customer_code']='CUST-'.now()->format('ymd').'-'.strtoupper(bin2hex(random_bytes(3)));if(!$creating&&blank($data['customer_code']??null))$data['customer_code']=$c->customer_code;$fupMode=$data['fup_mode'];unset($data['fup_mode']);$data['fup_override']=$fupMode==='inherit'?null:$fupMode==='on';$data['fup_enabled']=$fupMode==='on';$data['fup_limit_bytes']=blank($data['fup_limit_gb']??null)?null:(int)round((float)$data['fup_limit_gb']*1024*1024*1024);unset($data['fup_limit_gb']);$data['is_auto_isolate']=(bool)($data['is_auto_isolate']??false);return $data;}
+
+use App\Models\{Customer, FupState, Onu, Package, Router};
+use App\Services\FupService;
+use App\Services\RouterOsService;
+use App\Support\Audit;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
+use RuntimeException;
+
+class CustomerController extends Controller
+{
+    public function index(Request $r)
+    {
+        $q = Customer::with(['package', 'router'])
+            ->when($r->search, fn ($x, $v) => $x->where(fn ($q) => $q
+                ->where('name', 'like', '%'.$v.'%')
+                ->orWhere('customer_code', 'like', '%'.$v.'%')
+                ->orWhere('pppoe_username', 'like', '%'.$v.'%')
+                ->orWhere('phone', 'like', '%'.$v.'%')
+                ->orWhere('whatsapp_number', 'like', '%'.$v.'%')))
+            ->when($r->status, fn ($x, $v) => $x->where('status', $v))
+            ->latest()->paginate(25)->withQueryString();
+
+        return view('customers.index', ['customers' => $q]);
+    }
+
+    private function formData(Customer $customer): array
+    {
+        return [
+            'customer' => $customer,
+            'packages' => Package::orderBy('name')->get(),
+            'routers' => Router::orderBy('name')->get(),
+            'onus' => Onu::with('olt')->where(function ($q) use ($customer) {
+                $q->whereNull('customer_id');
+                if ($customer->exists) {
+                    $q->orWhere('customer_id', $customer->id);
+                }
+            })->orderBy('olt_id')->orderBy('pon_port')->get(),
+            'fupState' => $customer->exists
+                ? FupState::where('customer_id', $customer->id)
+                    ->where('period', app(FupService::class)->currentPeriod())->first()
+                : null,
+        ];
+    }
+
+    private function newCustomerCode(): string
+    {
+        do {
+            $code = 'CUST-'.Str::upper(Str::random(12));
+        } while (Customer::where('customer_code', $code)->exists());
+
+        return $code;
+    }
+
+    public function create()
+    {
+        $customer = new Customer(['customer_code' => $this->newCustomerCode()]);
+        return view('customers.form', $this->formData($customer) + [
+            'portalPassword' => old('portal_password', Str::random(16)),
+        ]);
+    }
+
+    public function store(Request $r, RouterOsService $routerOs)
+    {
+        $data = $this->validated($r);
+        $portalPassword = $data['portal_password'];
+        $onuId = $data['onu_record_id'] ?? null;
+        unset($data['onu_record_id']);
+
+        $customer = DB::transaction(function () use ($data, $onuId) {
+            $customer = Customer::create($data);
+            $customer->pppoe_profile_normal = $customer->pppoe_profile_normal ?: $customer->package?->normal_profile;
+            $customer->save();
+            $this->syncOnu($customer, $onuId);
+            return $customer;
+        });
+
+        Audit::log('customer.created', Customer::class, $customer->id, ['code' => $customer->customer_code]);
+
+        try {
+            $this->syncPppSecret($customer, $routerOs);
+            $message = 'Pelanggan ditambahkan dan secret PPP berhasil disimpan di MikroTik.';
+        } catch (\Throwable $e) {
+            Log::warning('Customer PPP secret sync failed', [
+                'customer_id' => $customer->id,
+                'router_id' => $customer->router_id,
+                'error' => $e->getMessage(),
+            ]);
+            $message = 'Data pelanggan tersimpan, tetapi secret PPP gagal disinkronkan ke MikroTik: '.$e->getMessage().' Periksa router lalu simpan ulang pelanggan.';
+        }
+
+        return redirect()->route('customers.edit', $customer)
+            ->with('success', $message)
+            ->with('portal_password_created', $portalPassword);
+    }
+
+    public function edit(Customer $customer)
+    {
+        return view('customers.form', $this->formData($customer));
+    }
+
+    public function update(Request $r, Customer $customer, RouterOsService $routerOs)
+    {
+        $data = $this->validated($r, $customer);
+        $onuId = $data['onu_record_id'] ?? null;
+        unset($data['onu_record_id']);
+
+        foreach (['pppoe_password', 'hotspot_password', 'portal_password', 'ktp_number', 'npwp'] as $secret) {
+            if (blank($data[$secret] ?? null)) {
+                unset($data[$secret]);
+            }
+        }
+
+        $previousRouter = $customer->router;
+        $previousUsername = $customer->pppoe_username;
+
+        DB::transaction(function () use ($customer, $data, $onuId) {
+            $customer->update($data);
+            if (!$customer->pppoe_profile_normal) {
+                $customer->update(['pppoe_profile_normal' => $customer->package?->normal_profile]);
+            }
+            $this->syncOnu($customer, $onuId);
+        });
+
+        $customer->refresh();
+        Audit::log('customer.updated', Customer::class, $customer->id);
+
+        try {
+            $this->syncPppSecret($customer, $routerOs, $previousUsername);
+            if ($previousRouter && $customer->service_type === 'pppoe'
+                && $previousRouter->id !== $customer->router_id && $previousUsername) {
+                $routerOs->deletePppSecret($previousRouter, $previousUsername);
+            }
+            $message = 'Pelanggan diperbarui dan secret PPP berhasil disinkronkan ke MikroTik.';
+        } catch (\Throwable $e) {
+            Log::warning('Customer PPP secret sync failed', [
+                'customer_id' => $customer->id,
+                'router_id' => $customer->router_id,
+                'error' => $e->getMessage(),
+            ]);
+            $message = 'Data pelanggan tersimpan, tetapi secret PPP gagal disinkronkan ke MikroTik: '.$e->getMessage().' Periksa router lalu simpan ulang pelanggan.';
+        }
+
+        return redirect()->route('customers.edit', $customer)->with('success', $message);
+    }
+
+    private function syncPppSecret(Customer $customer, RouterOsService $routerOs, ?string $previousUsername = null): void
+    {
+        if ($customer->service_type !== 'pppoe') {
+            return;
+        }
+        if (!$customer->router_id || !$customer->router) {
+            throw new RuntimeException('Pilih router MikroTik untuk layanan PPPoE.');
+        }
+        if (blank($customer->pppoe_username) || blank($customer->pppoe_password)) {
+            throw new RuntimeException('Username dan password PPP harus tersedia.');
+        }
+
+        $routerOs->createOrUpdatePppSecret($customer->router, [
+            'name' => $customer->pppoe_username,
+            'password' => $customer->pppoe_password,
+            'profile' => $customer->pppoe_profile_normal ?: $customer->package?->normal_profile ?: 'default',
+        ], $previousUsername);
+    }
+
+    private function syncOnu(Customer $customer, ?int $onuId): void
+    {
+        $onuId = $onuId ? (int) $onuId : null;
+        $previous = $customer->onu;
+        if ($previous && $previous->id !== $onuId) {
+            $previous->update(['customer_id' => null]);
+        }
+        if (!$onuId) {
+            $customer->update(['olt_id' => null]);
+            return;
+        }
+
+        $onu = Onu::with('olt')->lockForUpdate()->findOrFail($onuId);
+        if ($onu->customer_id && $onu->customer_id !== $customer->id) {
+            throw new RuntimeException('ONU sudah terhubung ke pelanggan lain.');
+        }
+        $onu->update(['customer_id' => $customer->id]);
+        $customer->update([
+            'olt_id' => $onu->olt_id,
+            'olt_name' => $onu->olt?->name,
+            'pon_port' => $onu->pon_port,
+            'onu_id' => $onu->onu_id,
+            'onu_sn' => $onu->serial_number,
+        ]);
+    }
+
+    private function validated(Request $r, ?Customer $customer = null): array
+    {
+        $creating = !$customer || !$customer->exists;
+        $service = $r->input('service_type');
+
+        $data = $r->validate([
+            'customer_code' => ['nullable', 'max:50', Rule::unique('customers', 'customer_code')->ignore($customer?->id)],
+            'name' => 'required|max:120',
+            'whatsapp_number' => 'nullable|max:30',
+            'area' => [$creating ? 'required' : 'nullable', 'max:120'],
+            'address' => 'nullable',
+            'rt' => 'nullable|max:10',
+            'rw' => 'nullable|max:10',
+            'village' => 'nullable|max:120',
+            'district' => 'nullable|max:120',
+            'city' => 'nullable|max:120',
+            'latitude' => 'nullable|numeric|between:-90,90',
+            'longitude' => 'nullable|numeric|between:-180,180',
+            'ktp_number' => 'nullable|max:50',
+            'registered_at' => 'nullable|date',
+            'modem_device' => 'nullable|max:120',
+            'source_port' => 'nullable|max:120',
+            'notes' => 'nullable|max:5000',
+            'service_type' => 'required|in:pppoe,hotspot',
+            'status' => 'required|in:active,isolated,suspended,terminated,trial',
+            'due_day' => 'required|integer|min:1|max:28',
+            'grace_days' => 'nullable|integer|min:0|max:31',
+            'activated_at' => 'nullable|date',
+            'router_id' => [$service === 'pppoe' ? 'required' : 'nullable', 'nullable', 'exists:routers,id'],
+            'package_id' => [$creating ? 'required' : 'nullable', 'exists:packages,id'],
+            'pppoe_username' => [$service === 'pppoe' ? 'required' : 'nullable', 'max:120', Rule::unique('customers', 'pppoe_username')->ignore($customer?->id)],
+            'pppoe_password' => [$service === 'pppoe' && $creating ? 'required' : 'nullable', 'string', 'max:255'],
+            'pppoe_ip' => 'nullable|ip',
+            'pppoe_mac' => 'nullable|mac_address',
+            'pppoe_profile_normal' => 'nullable|max:120',
+            'pppoe_profile_isolir' => 'nullable|max:120',
+            'hotspot_username' => [$service === 'hotspot' ? 'required' : 'nullable', 'max:120', Rule::unique('customers', 'hotspot_username')->ignore($customer?->id)],
+            'hotspot_password' => [$service === 'hotspot' && $creating ? 'required' : 'nullable', 'string', 'max:255'],
+            'olt_name' => 'nullable|max:120',
+            'pon_port' => 'nullable|max:50',
+            'onu_id' => 'nullable|max:50',
+            'onu_sn' => 'nullable|max:100',
+            'onu_record_id' => ['nullable', 'exists:onus,id', Rule::exists('onus', 'id')->where(fn ($q) => $q->whereNull('customer_id')->orWhere('customer_id', $customer?->id))],
+            'fup_mode' => 'required|in:inherit,on,off',
+            'fup_limit_gb' => 'nullable|numeric|min:0|max:100000',
+            'fup_speed_after' => 'nullable|max:50',
+            'is_auto_isolate' => 'nullable|boolean',
+            'portal_password' => 'nullable|string|min:8|max:255',
+        ]);
+
+        $data['customer_code'] = $creating ? $this->newCustomerCode() : $customer->customer_code;
+        $data['portal_password'] = filled($data['portal_password'] ?? null)
+            ? $data['portal_password']
+            : Str::random(16);
+
+        $fupMode = $data['fup_mode'];
+        unset($data['fup_mode']);
+        $data['fup_override'] = $fupMode === 'inherit' ? null : $fupMode === 'on';
+        $data['fup_enabled'] = $fupMode === 'on';
+        $data['fup_limit_bytes'] = blank($data['fup_limit_gb'] ?? null)
+            ? null : (int) round((float) $data['fup_limit_gb'] * 1024 * 1024 * 1024);
+        unset($data['fup_limit_gb']);
+        $data['is_auto_isolate'] = (bool) ($data['is_auto_isolate'] ?? false);
+
+        return $data;
+    }
 }
