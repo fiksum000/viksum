@@ -33,6 +33,7 @@ class CreateEncryptedBackup extends Command
         $sqlPath = $directory.'/'.$stamp.'.sql';
         $zipPath = $directory.'/'.$stamp.'.zip';
         $encryptedPath = $directory.'/'.$stamp.'.zip.enc';
+        $macPath = $encryptedPath.'.mac';
 
         try {
             $sql = fopen($sqlPath, 'wb');
@@ -66,11 +67,16 @@ class CreateEncryptedBackup extends Command
             $encrypt->run();
             if (!$encrypt->isSuccessful()) throw new \RuntimeException('Enkripsi backup gagal: '.$encrypt->getErrorOutput());
             chmod($encryptedPath, 0600);
+            $macKey = hash_hmac('sha256', 'billing-rtrwnet-backup-integrity', $key, true);
+            $mac = hash_hmac_file('sha256', $encryptedPath, $macKey);
+            if ($mac === false || file_put_contents($macPath, $mac."\n", LOCK_EX) === false) throw new \RuntimeException('Pemeriksaan integritas backup gagal dibuat.');
+            chmod($macPath, 0600);
             $this->pruneBackups($directory);
-            $this->info('Backup terenkripsi tersimpan: '.$encryptedPath);
+            $this->info('Backup terenkripsi dan MAC tersimpan: '.$encryptedPath);
             return self::SUCCESS;
         } catch (\Throwable $exception) {
             @unlink($encryptedPath);
+            @unlink($macPath);
             $this->error($exception->getMessage());
             return self::FAILURE;
         } finally {
@@ -94,7 +100,7 @@ class CreateEncryptedBackup extends Command
     {
         $retentionDays = max(1, (int) env('BACKUP_RETENTION_DAYS', 14));
         foreach (glob($directory.'/*.zip.enc') ?: [] as $backup) {
-            if (filemtime($backup) < now()->subDays($retentionDays)->getTimestamp()) @unlink($backup);
+            if (filemtime($backup) < now()->subDays($retentionDays)->getTimestamp()) { @unlink($backup); @unlink($backup.'.mac'); }
         }
     }
 }

@@ -10,6 +10,7 @@ Aplikasi billing mandiri untuk layanan RT/RW Net, dibangun dengan Laravel 13, PH
 - MikroTik RouterOS: koneksi, PPPoE, hotspot voucher, isolir, unisolir, serta pengukuran delta counter FUP bulanan.
 - Pengingat WhatsApp, template yang dapat diedit, pengiriman antrean dan broadcast.
 - Inventaris OLT/ONU, pencatatan data optik, laporan keuangan, scheduler, worker, dan backup terenkripsi terjadwal.
+- REST API baca-saja berversi untuk data pelanggan, invoice, dan status MikroTik dengan token API hash, kedaluwarsa, dan pencabutan.
 
 ## Spesifikasi server
 
@@ -60,11 +61,15 @@ Atur `FONNTE_TOKEN`, pastikan nomor pelanggan sesuai format provider, dan pantau
 
 ### OLT/ONU
 
-Inventaris dan pencatatan status/RX/TX manual tersedia. Polling live belum otomatis karena endpoint berbeda menurut merk/model dan versi firmware EPON. Adapter SNMP/CLI/API perlu dibuat dan diuji setelah model OLT serta metode akses aktual diketahui.
+Preset inventaris meliputi Hisfocus EPON dan C-Data EPON dengan manajemen Web. Pencatatan status/RX/TX masih manual. Form menyimpan host, port Web, username, dan password terenkripsi; polling/login browser belum diaktifkan karena endpoint dan autentikasi berbeda menurut model/firmware. Minta akses read-only serta uji adapter pada OLT yang dipakai sebelum polling dijadwalkan. Beberapa model C-Data mengiklankan Web, CLI, SNMP, Telnet, dan SSH; fitur persisnya perlu dicocokkan dengan model perangkat Anda ([contoh spesifikasi FD1304E](https://www.cdatatec.com/products/fd1304e-4-port-epon-olt/)).
+
+### REST API
+
+Lihat [docs/API.md](docs/API.md) untuk token, endpoint, filter, dan contoh pemanggilan. Token dapat dibuat dengan Artisan di server dan hanya ditampilkan satu kali.
 
 ## Backup
 
-Backup terenkripsi berjalan harian menggunakan systemd timer dan disimpan di `storage/app/private/backups`. Simpan salinan terenkripsi di luar CT (NAS/PC lain) agar tetap tersedia jika disk atau CT rusak. Kunci `BACKUP_ENCRYPTION_KEY` harus disimpan aman di luar CT juga.
+Backup terenkripsi berjalan harian menggunakan systemd timer dan disimpan di `storage/app/private/backups`. Simpan salinan terenkripsi di luar CT (NAS/PC lain) agar tetap tersedia jika disk atau CT rusak. Kunci `BACKUP_ENCRYPTION_KEY` harus disimpan aman di luar CT juga. Pemulihan database dan file storage lewat CLI tersedia; langkahnya ada di [docs/backup-restore.md](docs/backup-restore.md). `.env` aktif tidak ditimpa otomatis.
 
 ## Pengembangan lokal
 
@@ -77,4 +82,4 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-Workflow CI menjalankan pemeriksaan Composer dan suite Laravel di PHP 8.4 setelah commit didorong. OLT live polling dan restore backup dari panel admin belum termasuk; dokumentasi backup menjelaskan batasannya. Jangan menaruh `.env`, kata sandi, token, credential router, data pelanggan, atau file dump di repository.
+Workflow CI menjalankan pemeriksaan Composer dan suite Laravel di PHP 8.4 setelah commit didorong. OLT live polling dan restore backup dari panel admin belum termasuk. Jangan menaruh `.env`, kata sandi, token, credential router, data pelanggan, atau file dump di repository.

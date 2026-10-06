@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth.session' => \App\Http\Middleware\RequireLogin::class,
             'customer.session' => \App\Http\Middleware\RequireCustomerLogin::class,
             'role' => \App\Http\Middleware\RequireRole::class,
+            'api.token' => \App\Http\Middleware\AuthenticateApiToken::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
