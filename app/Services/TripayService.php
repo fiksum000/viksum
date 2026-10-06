@@ -95,7 +95,10 @@ class TripayService
             'customer_phone' => $phone,
             'order_items' => [['name' => 'Internet', 'price' => $amount, 'quantity' => 1]],
             'callback_url' => $this->value('tripay_callback_url', 'services.tripay.callback_url') ?: route('tripay.webhook'),
-            'return_url' => $this->value('tripay_return_url', 'services.tripay.return_url') ?: ($returnUrl ?? url('/portal')),
+            'return_url' => $this->settings()?->tripay_return_url
+                ?: (filled(config('services.tripay.return_url')) && ! str_ends_with(rtrim((string) parse_url(config('services.tripay.return_url'), PHP_URL_PATH), '/'), '/portal')
+                    ? config('services.tripay.return_url')
+                    : ($returnUrl ?? url('/portal'))),
             'expired_time' => now(config('billing.timezone'))->addMinutes(config('services.tripay.expiry_minutes'))->timestamp,
             'signature' => $signature,
         ];
