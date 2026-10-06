@@ -18,6 +18,13 @@
         .form-control::placeholder { color: #9b9b9b; }
         .form-select option { background: #111; color: #fff; }
         .text-muted { color: #adb5bd !important; }
+        .form-text { color: #adb5bd !important; }
+        .alert { --bs-alert-color: #f8f9fa; --bs-alert-bg: #101010; --bs-alert-border-color: #343434; }
+        .alert-secondary { --bs-alert-color: #e9ecef; --bs-alert-bg: #151515; --bs-alert-border-color: #343434; }
+        .alert-success { --bs-alert-color: #b8f3c7; --bs-alert-bg: #102318; --bs-alert-border-color: #245c37; }
+        .alert-danger { --bs-alert-color: #ffc2c7; --bs-alert-bg: #2a1114; --bs-alert-border-color: #71343a; }
+        .alert-warning { --bs-alert-color: #ffe69c; --bs-alert-bg: #2b230d; --bs-alert-border-color: #66551f; }
+        .alert-info { --bs-alert-color: #b6e3f5; --bs-alert-bg: #10232c; --bs-alert-border-color: #28546a; }
         .dropdown-menu { --bs-dropdown-bg: #111; --bs-dropdown-color: #f8f9fa; --bs-dropdown-link-color: #eee; --bs-dropdown-link-hover-bg: #222; }
         .modal-content, .list-group-item { background: #101010; color: #f8f9fa; border-color: #303030; }
         .page-link { background: #101010; color: #d5d5d5; border-color: #303030; }
