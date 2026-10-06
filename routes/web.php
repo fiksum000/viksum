@@ -1,7 +1,7 @@
 <?php
 
 use App\Http\Controllers\{AuthController, BroadcastController, CustomerController, CustomerImportExportController, CustomerPortalController, DashboardController, HotspotController, InvoiceController, InvoicePdfController, PackageController, PaymentController, PublicPaymentController, ReportsController, RouterController, UserController, WaTemplateController};
-use App\Http\Controllers\{OltController, OnuController};
+use App\Http\Controllers\{OltController, OnuController, PaymentSettingsController};
 use Illuminate\Support\Facades\Route;
 
 Route::get('/login', [AuthController::class, 'loginForm'])->name('login');
@@ -42,8 +42,11 @@ Route::middleware('auth.session')->group(function (): void {
         Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
         Route::get('/whatsapp', [WaTemplateController::class, 'index'])->name('whatsapp.index');
+        Route::put('/whatsapp/connection', [WaTemplateController::class, 'updateConnection'])->name('whatsapp.connection.update');
         Route::put('/whatsapp/templates/{template}', [WaTemplateController::class, 'update'])->name('whatsapp.templates.update');
         Route::post('/whatsapp/broadcast', [BroadcastController::class, 'send'])->middleware('throttle:5,1')->name('whatsapp.broadcast');
+        Route::get('/payment-settings', [PaymentSettingsController::class, 'index'])->name('payment-settings.index');
+        Route::put('/payment-settings', [PaymentSettingsController::class, 'update'])->name('payment-settings.update');
         Route::get('/packages', [PackageController::class, 'index'])->name('packages.index');
         Route::post('/packages', [PackageController::class, 'store'])->name('packages.store');
         Route::put('/packages/{package}', [PackageController::class, 'update'])->name('packages.update');
