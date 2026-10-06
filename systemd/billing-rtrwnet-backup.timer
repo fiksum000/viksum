@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily encrypted Billing RTRW Net backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+Unit=billing-rtrwnet-backup.service
+
+[Install]
+WantedBy=timers.target

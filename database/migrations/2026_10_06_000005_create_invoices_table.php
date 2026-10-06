@@ -1,0 +1,5 @@
+<?php
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+return new class extends Migration { public function up(): void { Schema::create('invoices', function(Blueprint $t){$t->id();$t->string('invoice_number')->unique();$t->string('public_token',64)->unique();$t->foreignId('customer_id')->constrained()->cascadeOnDelete();$t->string('period',7);$t->date('issued_at');$t->date('due_date');$t->unsignedBigInteger('subtotal');$t->unsignedBigInteger('discount')->default(0);$t->unsignedBigInteger('penalty')->default(0);$t->unsignedBigInteger('total');$t->enum('status',['draft','unpaid','paid','cancelled','expired'])->default('unpaid');$t->timestamp('paid_at')->nullable();$t->string('payment_url')->nullable();$t->string('payment_reference')->nullable()->index();$t->timestamp('payment_expired_at')->nullable();$t->text('notes')->nullable();$t->timestamps();$t->unique(['customer_id','period']);$t->index(['period','status']);$t->index(['customer_id','due_date']);}); } public function down(): void { Schema::dropIfExists('invoices'); } };

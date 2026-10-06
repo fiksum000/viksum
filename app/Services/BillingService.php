@@ -1,0 +1,7 @@
+<?php
+namespace App\Services;
+use Illuminate\Support\Str;
+use App\Models\{Customer,Invoice}; use Illuminate\Support\Carbon; use Illuminate\Support\Facades\DB;
+class BillingService {
+ public function generate(string $period):int {$count=0;$periodDate=Carbon::createFromFormat('Y-m-d',$period.'-01',config('billing.timezone')); Customer::with('package')->whereIn('status',['active','isolated'])->whereNotNull('package_id')->chunkById(200,function($customers)use($period,$periodDate,&$count){foreach($customers as $c){$exists=Invoice::where(['customer_id'=>$c->id,'period'=>$period])->exists();if($exists)continue;$day=min((int)$c->due_day,28);$due=$periodDate->copy()->day($day);$number='INV-'.str_replace('-','',$period).'-'.str_pad((string)$c->id,6,'0',STR_PAD_LEFT);$subtotal=(int)$c->package->price;$taxRate=(float)config('billing.tax_rate');$taxAmount=(int)round($subtotal*$taxRate/100);DB::transaction(function()use($c,$period,$periodDate,$due,$number,$subtotal,$taxRate,$taxAmount){$invoice=Invoice::create(['invoice_number'=>$number,'public_token'=>Str::random(48),'customer_id'=>$c->id,'period'=>$period,'issued_at'=>$periodDate->toDateString(),'due_date'=>$due->toDateString(),'subtotal'=>$subtotal,'discount'=>0,'penalty'=>0,'tax_rate'=>$taxRate,'tax_amount'=>$taxAmount,'total'=>$subtotal+$taxAmount,'status'=>'unpaid']);$invoice->items()->create(['description'=>$c->package->name,'quantity'=>1,'unit_price'=>$subtotal,'line_total'=>$subtotal]);});$count++;}});return $count;}
+}

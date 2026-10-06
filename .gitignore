@@ -1,0 +1,12 @@
+/.env
+/AI_MASTER_PROMPT.md
+/storage/app/private/backups/
+/vendor/
+/node_modules/
+/storage/*.key
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/logs/*
+/public/build/
+.phpunit.result.cache

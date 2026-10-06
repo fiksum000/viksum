@@ -1,0 +1,33 @@
+{
+  "$schema": "https://getcomposer.org/schema.json",
+  "name": "rtrwnet/billing",
+  "type": "project",
+  "description": "Billing RT/RW Net: Laravel 13, MikroTik RouterOS 7.22, Tripay, Fonnte, isolir and FUP.",
+  "keywords": ["laravel", "mikrotik", "pppoe", "hotspot", "billing", "tripay", "fonnte", "fup"],
+  "license": "MIT",
+  "require": {
+    "php": "^8.3",
+    "laravel/framework": "^13.0",
+    "laravel/tinker": "^3.0",
+    "evilfreelancer/routeros-api-php": "^1.7",
+    "guzzlehttp/guzzle": "^7.9",
+    "barryvdh/laravel-dompdf": "^3.1",
+    "phpoffice/phpspreadsheet": "^5.0"
+  },
+  "require-dev": {
+    "fakerphp/faker": "^1.24",
+    "laravel/pail": "^1.2",
+    "mockery/mockery": "^1.6",
+    "nunomaduro/collision": "^8.8",
+    "phpunit/phpunit": "^12.0"
+  },
+  "autoload": {"psr-4": {"App\\": "app/", "Database\\Factories\\": "database/factories/", "Database\\Seeders\\": "database/seeders/"}},
+  "autoload-dev": {"psr-4": {"Tests\\": "tests/"}},
+  "scripts": {
+    "post-autoload-dump": ["@php artisan package:discover --ansi"],
+    "dev": ["@php artisan serve"],
+    "test": ["@php artisan test"]
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}

@@ -1,0 +1,14 @@
+[Unit]
+Description=Billing RTRW Net Queue Worker
+After=network.target mariadb.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/billing-rtrwnet
+ExecStart=/usr/bin/php artisan queue:work --sleep=3 --tries=3 --backoff=10 --timeout=90
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

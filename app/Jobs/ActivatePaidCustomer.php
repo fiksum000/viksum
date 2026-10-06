@@ -1,0 +1,42 @@
+<?php
+
+namespace App\Jobs;
+
+use App\Models\Invoice;
+use App\Services\FonnteService;
+use App\Services\IsolationService;
+use App\Support\Audit;
+use Illuminate\Bus\Batchable;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+
+class ActivatePaidCustomer implements ShouldQueue
+{
+    use Batchable, Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+
+    public int $tries = 10;
+    public array $backoff = [30, 120, 300, 600];
+
+    public function __construct(public int $invoiceId)
+    {
+    }
+
+    public function handle(IsolationService $isolation, FonnteService $fonnte): void
+    {
+        $invoice = Invoice::with('customer.router', 'customer.package')->findOrFail($this->invoiceId);
+        if ($invoice->status !== 'paid' || !$invoice->customer) return;
+
+        $isolation->unisolate($invoice->customer);
+        if ($invoice->customer->phone) {
+            $fonnte->queue($invoice->customer->id, $invoice->customer->phone, "Pembayaran {$invoice->invoice_number} diterima. Terima kasih.", 'payment_success', [
+                'name' => $invoice->customer->name,
+                'invoice_number' => $invoice->invoice_number,
+                'amount' => number_format($invoice->total, 0, ',', '.'),
+            ]);
+        }
+        Audit::log('payment.customer_activated', Invoice::class, $invoice->id);
+    }
+}
