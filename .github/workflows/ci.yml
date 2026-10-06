@@ -9,6 +9,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Prepare Laravel runtime files
+        run: |
+          mkdir -p bootstrap/cache storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs
+          cp .env.example .env
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
@@ -17,3 +21,4 @@ jobs:
       - uses: ramsey/composer-install@v3
       - run: php artisan key:generate
       - run: php artisan test
+
