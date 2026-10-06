@@ -86,9 +86,11 @@ class CustomerController extends Controller
         try {
             $this->syncPppSecret($customer, $routerOs);
             $feedbackKey = 'success';
-            $message = $customer->service_type === 'pppoe'
+            $message = $customer->status === 'trial'
+                ? 'Pelanggan disimpan sebagai uji coba; belum ada secret yang dikirim ke MikroTik.'
+                : ($customer->service_type === 'pppoe'
                 ? 'Pelanggan ditambahkan dan secret PPP berhasil disimpan di MikroTik.'
-                : 'Pelanggan ditambahkan.';
+                : 'Pelanggan ditambahkan.');
         } catch (\Throwable $e) {
             Log::warning('Customer PPP secret sync failed', [
                 'customer_id' => $customer->id,
@@ -141,15 +143,17 @@ class CustomerController extends Controller
                 ? $previousUsername
                 : null;
             $this->syncPppSecret($customer, $routerOs, $previousUsernameOnSelectedRouter);
-            if ($previousRouter && $previousServiceType === 'pppoe'
+            if ($customer->status !== 'trial' && $previousRouter && $previousServiceType === 'pppoe'
                 && ($customer->service_type !== 'pppoe' || $previousRouter->id !== $customer->router_id || $previousUsername !== $customer->pppoe_username)
                 && $previousUsername) {
                 $routerOs->deletePppSecret($previousRouter, $previousUsername);
             }
             $feedbackKey = 'success';
-            $message = $customer->service_type === 'pppoe'
+            $message = $customer->status === 'trial'
+                ? 'Data uji coba diperbarui; belum ada perubahan ke MikroTik.'
+                : ($customer->service_type === 'pppoe'
                 ? 'Pelanggan diperbarui dan secret PPP berhasil disinkronkan ke MikroTik.'
-                : 'Data pelanggan diperbarui.';
+                : 'Data pelanggan diperbarui.');
         } catch (\Throwable $e) {
             Log::warning('Customer PPP secret sync failed', [
                 'customer_id' => $customer->id,
