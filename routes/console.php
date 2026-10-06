@@ -12,3 +12,4 @@ Schedule::command('billing:reminders 0')->dailyAt('08:30')->withoutOverlapping()
 Schedule::command('billing:reminders -1')->dailyAt('08:40')->withoutOverlapping();
 Schedule::command('billing:reminders -3')->dailyAt('08:50')->withoutOverlapping();
 Schedule::command('billing:reminders -7')->dailyAt('09:00')->withoutOverlapping();
+

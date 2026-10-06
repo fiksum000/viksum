@@ -13,14 +13,16 @@ class FupService
     {
     }
 
-    public function currentPeriod(?\Illuminate\Support\Carbon $at = null): string
+    /** Billing/FUP period rolls over on the 10th of each month. */
+    public function currentPeriod(): string
     {
-        $date = $at ?: now(config('billing.timezone'));
-        if ((int) $date->format('j') < 10) {
-            $date = $date->copy()->subMonthNoOverflow();
+        $now = now(config('billing.timezone'));
+
+        if ($now->day < 10) {
+            $now->subMonthNoOverflow();
         }
 
-        return $date->format('Y-m');
+        return $now->format('Y-m');
     }
 
     public function collect(): int
@@ -30,7 +32,6 @@ class FupService
         $activeMaps = [];
 
         $this->restoreDisabledCustomers($period);
-        $this->restoreExpiredCycleStates($period);
 
         Customer::with(['router', 'package'])
             ->where('status', 'active')
@@ -119,37 +120,6 @@ class FupService
         return $count;
     }
 
-
-    private function restoreExpiredCycleStates(string $period): void
-    {
-        FupState::with(['customer.router', 'customer.package'])
-            ->where('period', '!=', $period)
-            ->where('limited', true)
-            ->chunkById(100, function ($states): void {
-                foreach ($states as $state) {
-                    if (!$state->customer) {
-                        continue;
-                    }
-
-                    try {
-                        $customer = $state->customer;
-                        $this->restoreNormalProfile($customer);
-                        $state->update(['limited' => false]);
-                        DB::table('fup_logs')->insert([
-                            'customer_id' => $customer->id, 'period' => $state->period, 'action' => 'reset',
-                            'total_bytes' => $state->total_bytes,
-                            'profile_before' => $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
-                            'profile_after' => $customer->pppoe_profile_normal ?: $customer->package?->normal_profile,
-                            'details' => 'Profil normal dipulihkan setelah siklus FUP tanggal 10 berganti',
-                            'created_at' => now(), 'updated_at' => now(),
-                        ]);
-                    } catch (\Throwable $exception) {
-                        report($exception);
-                    }
-                }
-            });
-    }
-
     private function restoreDisabledCustomers(string $period): void
     {
         FupState::with(['customer.router', 'customer.package'])
@@ -205,7 +175,7 @@ class FupService
                                 'total_bytes' => $state->total_bytes,
                                 'profile_before' => $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
                                 'profile_after' => $customer->pppoe_profile_normal ?: $customer->package?->normal_profile,
-                                'details' => 'Siklus FUP tanggal 10 dimulai; profil normal dipulihkan',
+                                'details' => 'Kuota FUP direset bulanan; profil normal dipulihkan',
                                 'created_at' => now(), 'updated_at' => now(),
                             ]);
                         } catch (\Throwable $e) {
@@ -213,10 +183,8 @@ class FupService
                             continue;
                         }
                     }
-                    // Keep the previous cycle totals for history. The new cycle starts with a fresh state row.
-                    if (!$state->limited) {
-                        $affected++;
-                    }
+                    $state->update(['total_bytes' => 0, 'last_rx' => 0, 'last_tx' => 0, 'limited' => false]);
+                    $affected++;
                 }
             });
 
@@ -234,3 +202,4 @@ class FupService
         $this->routerOs->disconnectPppActive($customer->router, $customer->pppoe_username);
     }
 }
+
