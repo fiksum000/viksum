@@ -5,6 +5,7 @@ use App\Models\{Customer, FupState, Onu, Package, Router};
 use App\Services\FupService;
 use App\Services\RouterOsService;
 use App\Support\Audit;
+use App\Support\WhatsappNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -136,7 +137,10 @@ class CustomerController extends Controller
         Audit::log('customer.updated', Customer::class, $customer->id);
 
         try {
-            $this->syncPppSecret($customer, $routerOs, $previousUsername);
+            $previousUsernameOnSelectedRouter = $previousRouter?->id === $customer->router_id
+                ? $previousUsername
+                : null;
+            $this->syncPppSecret($customer, $routerOs, $previousUsernameOnSelectedRouter);
             if ($previousRouter && $previousServiceType === 'pppoe'
                 && ($customer->service_type !== 'pppoe' || $previousRouter->id !== $customer->router_id || $previousUsername !== $customer->pppoe_username)
                 && $previousUsername) {
@@ -208,11 +212,20 @@ class CustomerController extends Controller
     {
         $creating = !$customer || !$customer->exists;
         $service = $r->input('service_type');
+        $rawWhatsapp = $r->input('whatsapp_number');
+        $normalizedWhatsapp = WhatsappNumber::normalize(is_string($rawWhatsapp) ? $rawWhatsapp : null);
+        $r->merge(['whatsapp_number' => filled($rawWhatsapp) && blank($normalizedWhatsapp) ? 'invalid' : $normalizedWhatsapp]);
 
         $data = $r->validate([
             'customer_code' => ['nullable', 'max:50', Rule::unique('customers', 'customer_code')->ignore($customer?->id)],
             'name' => 'required|max:120',
-            'whatsapp_number' => 'nullable|max:30',
+            'whatsapp_number' => [
+                'nullable',
+                'string',
+                'max:30',
+                'regex:/^628[0-9]{7,12}$/',
+                Rule::unique('customers', 'whatsapp_number')->ignore($customer?->id),
+            ],
             'area' => [$creating ? 'required' : 'nullable', 'max:120'],
             'address' => 'nullable',
             'rt' => 'nullable|max:10',
@@ -271,3 +284,4 @@ class CustomerController extends Controller
         return $data;
     }
 }
+

@@ -21,7 +21,7 @@
             <div class="col-md-4"><label for="customer_code" class="form-label">Kode pelanggan</label><input id="customer_code" name="customer_code" class="form-control" maxlength="50" value="{{ old('customer_code', $customer->customer_code) }}" readonly><div class="form-text">Dibuat otomatis dan unik oleh sistem. Kode ini juga dipakai untuk login portal pelanggan.</div></div>
             <div class="col-md-4"><label for="name" class="form-label">Nama <span class="text-danger">*</span></label><input id="name" name="name" class="form-control" maxlength="120" value="{{ old('name', $customer->name) }}" required></div>
             <div class="col-md-4"><label for="area" class="form-label">Area <span class="text-danger">*</span></label><input id="area" name="area" class="form-control" maxlength="120" value="{{ old('area', $customer->area) }}" placeholder="Contoh: M IKIN" {{ $creating ? 'required' : '' }}><div class="form-text">Nama area bebas; data lama boleh tetap kosong.</div></div>
-            <div class="col-md-4"><label for="whatsapp_number" class="form-label">WhatsApp</label><input id="whatsapp_number" name="whatsapp_number" class="form-control" maxlength="30" value="{{ old('whatsapp_number', $customer->whatsapp_number) }}" placeholder="628xxxxxxxxxx"><div class="form-text">Untuk notifikasi, gunakan format internasional tanpa tanda +. Nomor lama tetap dipakai sebagai cadangan.</div></div>
+            <div class="col-md-4"><label for="whatsapp_number" class="form-label">WhatsApp</label><input id="whatsapp_number" name="whatsapp_number" type="tel" inputmode="tel" autocomplete="tel" class="form-control" maxlength="30" value="{{ old('whatsapp_number', $customer->whatsapp_number) }}" placeholder="08xxxxxxxxxx atau 628xxxxxxxxxx"><div class="form-text">Nomor otomatis disimpan ke format 62… . Satu nomor hanya boleh dipakai satu pelanggan.</div></div>
             <div class="col-md-4"><label for="registered_at" class="form-label">Tanggal daftar</label><input id="registered_at" name="registered_at" type="date" class="form-control" value="{{ old('registered_at', $customer->registered_at?->format('Y-m-d') ?? ($creating ? now()->format('Y-m-d') : '')) }}"></div>
             <div class="col-12"><label for="address" class="form-label">Alamat</label><textarea id="address" name="address" rows="2" class="form-control">{{ old('address', $customer->address) }}</textarea></div>
             <div class="col-12"><label for="notes" class="form-label">Catatan tambahan</label><textarea id="notes" name="notes" rows="2" maxlength="5000" class="form-control">{{ old('notes', $customer->notes) }}</textarea></div>
@@ -227,3 +227,4 @@
 })();
 </script>
 @endsection
+

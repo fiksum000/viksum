@@ -20,7 +20,44 @@ class RouterOsService {
   public function enablePppSecret(Router $router,string $username,bool $enable):void{$c=$this->client($router);$c->query((new Query('/ppp/secret/set'))->equal('.id',$this->pppId($router,$username))->equal('disabled',$enable?'no':'yes'))->read();}
   public function disconnectPppActive(Router $router,string $username):void{$c=$this->client($router);$rows=$c->query((new Query('/ppp/active/print'))->where('name',$username))->read();foreach($rows as $row){if(isset($row['.id']))$c->query((new Query('/ppp/active/remove'))->equal('.id',$row['.id']))->read();}}
   public function activePppMap(Router $router):array{$rows=$this->client($router)->query('/ppp/active/print')->read();$out=[];foreach($rows as $r){$n=$r['name']??null;if($n)$out[$n]=$r;}return $out;}
-  public function createOrUpdatePppSecret(Router $router,array $data,?string $previousUsername=null):void{ $c=$this->client($router);$name=$data['name'];$profile=$data['profile']??'default';$profiles=$c->query('/ppp/profile/print')->read();$profileExists=false;foreach($profiles as $row){if(($row['name']??null)===$profile){$profileExists=true;break;}}if(!$profileExists)throw new RuntimeException("Profil PPP '{$profile}' tidak ditemukan di MikroTik. Perbaiki profil normal pada paket atau pelanggan.");$lookup=filled($previousUsername)?$previousUsername:$name;$found=$this->findPppSecret($router,$lookup);if(!$found&&$lookup!==$name)$found=$this->findPppSecret($router,$name);$q=(new Query($found?'/ppp/secret/set':'/ppp/secret/add'))->equal('name',$name)->equal('password',$data['password']??'')->equal('service','pppoe')->equal('profile',$profile);if($found)$q->equal('.id',$found[0]['.id']);$c->query($q)->read();$verified=false;foreach($this->listPppSecrets($router) as $row){if(($row['name']??null)===$name){$verified=true;break;}}if(!$verified)throw new RuntimeException("Secret PPP '{$name}' tidak terverifikasi setelah dikirim ke MikroTik.");}
+  public function createOrUpdatePppSecret(Router $router,array $data,?string $previousUsername=null):void
+  {
+      $client = $this->client($router);
+      $name = $data['name'];
+      $profile = $data['profile'] ?? 'default';
+      $profiles = $client->query('/ppp/profile/print')->read();
+      $profileExists = collect($profiles)->contains(fn ($row) => ($row['name'] ?? null) === $profile);
+      if (!$profileExists) {
+          throw new RuntimeException("Profil PPP '{$profile}' tidak ditemukan di MikroTik. Perbaiki profil normal pada paket atau pelanggan.");
+      }
+
+      $secrets = $this->listPppSecrets($router);
+      $findByName = fn (string $username) => collect($secrets)->first(fn ($row) => ($row['name'] ?? null) === $username);
+      $existingTarget = $findByName($name);
+      $existingPrevious = filled($previousUsername) ? $findByName($previousUsername) : null;
+
+      // Only update a secret known to belong to this customer. Never overwrite
+      // an unrelated MikroTik secret just because the username happens to match.
+      if ($existingTarget && (!$existingPrevious || ($existingPrevious['.id'] ?? null) !== ($existingTarget['.id'] ?? null))) {
+          throw new RuntimeException("Username PPP '{$name}' sudah ada di MikroTik dan tidak cocok dengan secret pelanggan ini. Gunakan username lain atau periksa router yang dipilih.");
+      }
+
+      $secretToUpdate = $existingPrevious;
+      $query = (new Query($secretToUpdate ? '/ppp/secret/set' : '/ppp/secret/add'))
+          ->equal('name', $name)
+          ->equal('password', $data['password'] ?? '')
+          ->equal('service', 'pppoe')
+          ->equal('profile', $profile);
+      if ($secretToUpdate) {
+          $query->equal('.id', $secretToUpdate['.id']);
+      }
+      $client->query($query)->read();
+
+      $verified = $this->findPppSecret($router, $name);
+      if (!$verified) {
+          throw new RuntimeException("Secret PPP '{$name}' tidak terverifikasi setelah dikirim ke MikroTik.");
+      }
+  }
   public function deletePppSecret(Router $router,string $username):void{$client=$this->client($router);$rows=$this->findPppSecret($router,$username);foreach($rows as $row){if(isset($row['.id']))$client->query((new Query('/ppp/secret/remove'))->equal('.id',$row['.id']))->read();}}
   public function listPppSecrets(Router $router):array{return $this->client($router)->query('/ppp/secret/print')->read();}
   public function listPppProfiles(Router $router):array{return $this->client($router)->query('/ppp/profile/print')->read();}
@@ -31,3 +68,4 @@ class RouterOsService {
   public function disconnectHotspotActive(Router $router,string $username):void{$client=$this->client($router);$rows=$client->query((new Query('/ip/hotspot/active/print'))->where('user',$username))->read();foreach($rows as $row){if(isset($row['.id']))$client->query((new Query('/ip/hotspot/active/remove'))->equal('.id',$row['.id']))->read();}}
   public function deleteHotspotUser(Router $router,string $username):void{$client=$this->client($router);$rows=$client->query((new Query('/ip/hotspot/user/print'))->where('name',$username))->read();foreach($rows as $row){if(isset($row['.id']))$client->query((new Query('/ip/hotspot/user/remove'))->equal('.id',$row['.id']))->read();}}
 }
+
