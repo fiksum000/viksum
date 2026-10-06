@@ -74,6 +74,9 @@ sudo install -d -m 0775 -o "$(id -un)" -g "$(id -gn)" bootstrap/cache
 composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
 php artisan key:generate --force
 php artisan migrate --seed --force
+sed -i '/^ADMIN_PASSWORD=/d' .env
+sudo chown "$(id -un):www-data" .env
+sudo chmod 0640 .env
 php artisan storage:link || true
 php artisan optimize
 
