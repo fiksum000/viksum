@@ -3,15 +3,54 @@
 namespace App\Http\Controllers;
 
 use App\Models\WaTemplate;
+use App\Models\IntegrationSetting;
+use App\Models\WaLog;
+use App\Services\FonnteService;
 use App\Support\Audit;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class WaTemplateController extends Controller
 {
     public function index()
     {
-        return view('whatsapp.index', ['templates' => WaTemplate::orderBy('name')->get()]);
+        $settings = IntegrationSetting::query()->find(1);
+        return view('whatsapp.index', [
+            'templates' => WaTemplate::orderBy('name')->get(),
+            'settings' => $settings,
+            'fonnteConfigured' => app(FonnteService::class)->isConfigured(),
+            'webhookUrl' => $settings?->fonnte_webhook_token ? route('fonnte.webhook', $settings->fonnte_webhook_token) : null,
+            'incomingLogs' => WaLog::whereIn('event', ['incoming', 'device_status'])->latest()->limit(20)->get(),
+        ]);
+    }
+
+    public function updateConnection(Request $request)
+    {
+        $data = $request->validate([
+            'fonnte_enabled' => ['required', 'boolean'],
+            'fonnte_account_name' => ['required', 'string', 'min:2', 'max:120'],
+            'fonnte_api_token' => ['nullable', 'string', 'max:2000'],
+            'rotate_webhook_token' => ['nullable', 'boolean'],
+        ]);
+
+        $settings = IntegrationSetting::query()->find(1) ?? new IntegrationSetting(['id' => 1]);
+        if ($data['fonnte_enabled'] && blank($data['fonnte_api_token'] ?? null) && blank($settings->fonnte_api_token) && blank(config('services.fonnte.token'))) {
+            throw ValidationException::withMessages(['fonnte_api_token' => 'API Key / Token Fonnte wajib diisi sebelum koneksi diaktifkan.']);
+        }
+        $settings->fonnte_enabled = $data['fonnte_enabled'];
+        $settings->fonnte_account_name = $data['fonnte_account_name'];
+        $settings->updated_by = session('user_id');
+        if (filled($data['fonnte_api_token'] ?? null)) {
+            $settings->fonnte_api_token = trim($data['fonnte_api_token']);
+        }
+        if (! $settings->fonnte_webhook_token || ($data['rotate_webhook_token'] ?? false)) {
+            $settings->fonnte_webhook_token = \Illuminate\Support\Str::random(48);
+        }
+        $settings->save();
+        Audit::log('fonnte.connection_updated', IntegrationSetting::class, $settings->id, ['enabled' => $settings->fonnte_enabled]);
+
+        return back()->with('success', 'Koneksi Fonnte berhasil disimpan. Webhook URL dapat disalin ke pengaturan perangkat Fonnte.');
     }
 
     public function update(Request $request, WaTemplate $template)
