@@ -29,22 +29,32 @@
                             <div class="alert alert-danger">{{ session('error') }}</div>
                         @endif
                         @if ($activePayment)
-                            <div class="alert alert-info">Checkout pembayaran masih aktif untuk metode {{ $activePayment->channel }}.</div>
-                            <a class="btn btn-primary w-100" href="{{ $activePayment->checkout_url }}" rel="noopener">Lanjutkan Pembayaran</a>
-                            <p class="small text-muted mt-3 mb-0">Berlaku sampai {{ $invoice->payment_expired_at->timezone(config('billing.timezone'))->format('d-m-Y H:i') }}.</p>
-                        @else
+                            <div class="alert alert-info">Checkout Tripay masih aktif untuk metode {{ $activePayment->channel }}.</div>
+                            <a class="btn btn-primary w-100" href="{{ $activePayment->checkout_url }}" rel="noopener">Lanjutkan Pembayaran via Tripay</a>
+                            <p class="small text-muted mt-2">Berlaku sampai {{ $invoice->payment_expired_at->timezone(config('billing.timezone'))->format('d-m-Y H:i') }}.</p>
+                        @elseif ($paymentChannels)
                             <form method="POST" action="{{ url('/pay/'.$invoice->public_token) }}">
                                 @csrf
                                 <label class="form-label" for="method">Metode pembayaran</label>
                                 <select id="method" name="method" class="form-select mb-3" required>
-                                    @forelse ($paymentChannels as $channel)
+                                    @foreach ($paymentChannels as $channel)
                                         <option value="{{ $channel['code'] }}">{{ $channel['name'] }}</option>
-                                    @empty
-                                        <option value="">Channel pembayaran belum tersedia</option>
-                                    @endforelse
+                                    @endforeach
                                 </select>
-                                <button class="btn btn-primary w-100" @disabled(empty($paymentChannels))>Bayar Sekarang</button>
+                                <button class="btn btn-primary w-100">Bayar via Tripay</button>
                             </form>
+                        @else
+                            <div class="alert alert-secondary">Pembayaran Tripay belum tersedia. Silakan gunakan QRIS DANA jika ditampilkan atau hubungi admin.</div>
+                        @endif
+
+                        @if ($danaQrUrl)
+                            <hr class="my-4">
+                            <h2 class="h5">Bayar dengan QRIS DANA Bisnis</h2>
+                            <p class="small text-muted">Pindai QR berikut dan bayar tepat sebesar total invoice.</p>
+                            <div class="text-center"><img src="{{ $danaQrUrl }}" alt="QRIS DANA Bisnis" class="img-fluid rounded" style="max-height:320px"></div>
+                            @if($danaSettings?->dana_account_name)<p class="mt-3 mb-1">Nama akun: <strong>{{ $danaSettings->dana_account_name }}</strong></p>@endif
+                            @if($danaSettings?->dana_phone)<p class="mb-1">Nomor DANA: <strong>{{ $danaSettings->dana_phone }}</strong></p>@endif
+                            <p class="small text-muted mt-2 mb-0">Pembayaran QRIS akan diverifikasi admin sebelum invoice ditandai lunas. Simpan bukti pembayaran.</p>
                         @endif
                     @endif
                 </div>
