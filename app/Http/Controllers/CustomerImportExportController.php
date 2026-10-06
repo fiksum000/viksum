@@ -18,7 +18,8 @@ class CustomerImportExportController
     private const HEADER_ALIASES = [
         'customer_code' => ['customer_code', 'customer_id', 'kode_pelanggan', 'id_pelanggan', 'kode'],
         'name' => ['name', 'nama', 'nama_pelanggan', 'customer_name'],
-        'phone' => ['phone', 'telephone', 'telp', 'nomor_wa', 'whatsapp', 'nomor_hp', 'handphone'],
+        'phone' => ['phone', 'telephone', 'telp', 'nomor_hp', 'handphone'],
+        'whatsapp_number' => ['whatsapp_number', 'whatsapp', 'wa', 'nomor_wa'],
         'email' => ['email', 'email_address'],
         'address' => ['address', 'alamat', 'alamat_pelanggan'],
         'rt' => ['rt'], 'rw' => ['rw'], 'village' => ['village', 'desa', 'kelurahan'],
@@ -73,6 +74,7 @@ class CustomerImportExportController
                 $attributes = [
                     'name' => trim((string) ($data['name'] ?? '')) ?: $username,
                     'phone' => $data['phone'] ?? null,
+                    'whatsapp_number' => $data['whatsapp_number'] ?? null,
                     'email' => $data['email'] ?? null,
                     'address' => $data['address'] ?? null,
                     'rt' => $data['rt'] ?? null,
@@ -107,14 +109,14 @@ class CustomerImportExportController
 
     public function export()
     {
-        $headers = ['customer_code', 'name', 'phone', 'email', 'address', 'rt', 'rw', 'village', 'district', 'city', 'service_type', 'status', 'due_day', 'grace_days', 'package', 'router', 'pppoe_username', 'pppoe_profile_normal', 'pppoe_profile_isolir', 'pppoe_ip', 'pppoe_mac', 'activated_at'];
+        $headers = ['customer_code', 'name', 'whatsapp_number', 'phone', 'email', 'area', 'address', 'rt', 'rw', 'village', 'district', 'city', 'service_type', 'status', 'due_day', 'grace_days', 'package', 'router', 'pppoe_username', 'pppoe_profile_normal', 'pppoe_profile_isolir', 'pppoe_ip', 'pppoe_mac', 'activated_at', 'registered_at', 'modem_device', 'source_port', 'olt_name', 'pon_port', 'onu_id', 'onu_sn', 'latitude', 'longitude', 'notes'];
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         foreach ($headers as $index => $header) $sheet->setCellValueByColumnAndRow($index + 1, 1, $header);
 
         $line = 2;
         foreach (Customer::with(['package', 'router'])->cursor() as $customer) {
-            $values = [$customer->customer_code, $customer->name, $customer->phone, $customer->email, $customer->address, $customer->rt, $customer->rw, $customer->village, $customer->district, $customer->city, $customer->service_type, $customer->status, $customer->due_day, $customer->grace_days, $customer->package?->name, $customer->router?->name, $customer->pppoe_username, $customer->pppoe_profile_normal, $customer->pppoe_profile_isolir, $customer->pppoe_ip, $customer->pppoe_mac, $customer->activated_at?->format('Y-m-d')];
+            $values = [$customer->customer_code, $customer->name, $customer->whatsapp_number, $customer->phone, $customer->email, $customer->area, $customer->address, $customer->rt, $customer->rw, $customer->village, $customer->district, $customer->city, $customer->service_type, $customer->status, $customer->due_day, $customer->grace_days, $customer->package?->name, $customer->router?->name, $customer->pppoe_username, $customer->pppoe_profile_normal, $customer->pppoe_profile_isolir, $customer->pppoe_ip, $customer->pppoe_mac, $customer->activated_at?->format('Y-m-d'), $customer->registered_at?->format('Y-m-d'), $customer->modem_device, $customer->source_port, $customer->olt_name, $customer->pon_port, $customer->onu_id, $customer->onu_sn, $customer->latitude, $customer->longitude, $customer->notes];
             foreach ($values as $index => $value) $sheet->setCellValueByColumnAndRow($index + 1, $line, $value);
             $line++;
         }
