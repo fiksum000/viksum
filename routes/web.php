@@ -7,11 +7,8 @@ use Illuminate\Support\Facades\Route;
 Route::get('/login', [AuthController::class, 'loginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1')->name('login.attempt');
 Route::get('/pay/{token}', [PublicPaymentController::class, 'show'])->middleware('throttle:30,1')->name('public.pay');
-Route::get('/isolir', fn () => response()->view('public.isolation')->header('Cache-Control', 'no-store, private'))->middleware('throttle:60,1')->name('public.isolation');
 Route::post('/pay/{token}', [PublicPaymentController::class, 'create'])->middleware('throttle:10,1')->name('public.pay.create');
-Route::get('/isolir', function () {
-    return session('customer_id') ? redirect()->route('portal.isolated') : redirect()->route('portal.login');
-})->name('public.isolated');
+Route::get('/isolir', fn () => response()->view('public.isolation')->header('Cache-Control', 'no-store, private'))->middleware('throttle:60,1')->name('public.isolated');
 Route::get('/portal/login', [CustomerPortalController::class, 'loginForm'])->name('portal.login');
 Route::post('/portal/login', [CustomerPortalController::class, 'login'])->middleware('throttle:10,1')->name('portal.login.submit');
 Route::middleware('customer.session')->prefix('/portal')->name('portal.')->group(function (): void {
