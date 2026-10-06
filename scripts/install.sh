@@ -70,6 +70,7 @@ FLUSH PRIVILEGES;
 SQL
 unset DB_PASSWORD
 
+sudo install -d -m 0775 -o "$(id -un)" -g "$(id -gn)" bootstrap/cache
 composer install --no-interaction --prefer-dist --optimize-autoloader --no-dev
 php artisan key:generate --force
 php artisan migrate --seed --force
@@ -103,6 +104,9 @@ server {
 }
 NGINX
 sudo ln -sfn /etc/nginx/sites-available/billing-rtrwnet /etc/nginx/sites-enabled/billing-rtrwnet
+if [[ -L /etc/nginx/sites-enabled/default && "$(readlink -f /etc/nginx/sites-enabled/default)" == /etc/nginx/sites-available/default ]]; then
+  sudo rm -f /etc/nginx/sites-enabled/default
+fi
 sudo nginx -t
 
 sudo install -o root -g root -m 0644 systemd/billing-rtrwnet-worker.service /etc/systemd/system/billing-rtrwnet-worker.service
