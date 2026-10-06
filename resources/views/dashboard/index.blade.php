@@ -8,16 +8,16 @@
 
 <style>
     .dash-title { letter-spacing: -.045em;font-weight:760 }
-    .dash-panel { border: 1px solid #202923; border-radius: 16px; background: linear-gradient(145deg,#101411,#0b0e0c); overflow: hidden; }
-    .dash-panel-title { padding: .9rem 1.05rem; border-bottom: 1px solid #202923; background: rgba(255,255,255,.018); font-size: .94rem; font-weight: 700; }
-    .dash-tile { min-height: 108px; border:1px solid rgba(255,255,255,.065);border-radius: 13px; padding: 1rem; color: #fff; display: flex; flex-direction: column; justify-content: space-between;transition:transform .16s,border-color .16s; }
+    .dash-panel { border: 1px solid #2b352d; border-radius: 16px; background: linear-gradient(145deg,#141a15,#0e120f); overflow: hidden; }
+    .dash-panel-title { padding: .9rem 1.05rem; border-bottom: 1px solid #2b352d; background: rgba(255,255,255,.035); font-size: .94rem; font-weight: 700; }
+    .dash-tile { min-height: 108px; border:1px solid rgba(255,255,255,.11);border-radius: 13px; padding: 1rem; color: #fff; display: flex; flex-direction: column; justify-content: space-between;transition:transform .16s,border-color .16s; }
     .dash-tile:hover {transform:translateY(-2px);border-color:rgba(255,255,255,.18)}
     .dash-tile .dash-value { font-size: clamp(1.55rem, 3vw, 2.15rem); font-weight: 760; line-height: 1;letter-spacing:-.04em }
     .dash-tile .dash-label { font-size: .8rem; color:rgba(255,255,255,.78); }
-    .dash-blue { background: linear-gradient(145deg,#12333a,#10272c); } .dash-green { background: linear-gradient(145deg,#1b3a2b,#14291f); }
-    .dash-yellow { background: linear-gradient(145deg,#3a331c,#282313); } .dash-red { background: linear-gradient(145deg,#3b2528,#2c1b1e); }
-    .dash-slate { background: linear-gradient(145deg,#202823,#171d19); }
-    .dash-system { min-height: 112px; background: linear-gradient(145deg,#111713,#0b0f0c); border: 1px solid #202923; }
+    .dash-blue { background: linear-gradient(145deg,#194955,#123941); } .dash-green { background: linear-gradient(145deg,#285b3b,#1a422a); }
+    .dash-yellow { background: linear-gradient(145deg,#5a4a1d,#3d3215); } .dash-red { background: linear-gradient(145deg,#5a3036,#402328); }
+    .dash-slate { background: linear-gradient(145deg,#303b33,#202923); }
+    .dash-system { min-height: 112px; background: linear-gradient(145deg,#171f19,#101611); border: 1px solid #2b352d; }
     #traffic-chart { width: 100%; height: 260px; display: block; }
     @media (max-width: 575.98px) { #traffic-chart { height: 205px; } }
 </style>
