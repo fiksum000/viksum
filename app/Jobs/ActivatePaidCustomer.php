@@ -30,8 +30,8 @@ class ActivatePaidCustomer implements ShouldQueue
         if ($invoice->status !== 'paid' || !$invoice->customer) return;
 
         $isolation->unisolate($invoice->customer);
-        if ($invoice->customer->phone) {
-            $fonnte->queue($invoice->customer->id, $invoice->customer->phone, "Pembayaran {$invoice->invoice_number} diterima. Terima kasih.", 'payment_success', [
+        if ($invoice->customer->whatsapp_number ?: $invoice->customer->phone) {
+            $fonnte->queue($invoice->customer->id, $invoice->customer->whatsapp_number ?: $invoice->customer->phone, "Pembayaran {$invoice->invoice_number} diterima. Terima kasih.", 'payment_success', [
                 'name' => $invoice->customer->name,
                 'invoice_number' => $invoice->invoice_number,
                 'amount' => number_format($invoice->total, 0, ',', '.'),
