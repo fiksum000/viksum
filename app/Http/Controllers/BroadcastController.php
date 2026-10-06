@@ -5,16 +5,17 @@ namespace App\Http\Controllers;
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\Customer;
 use App\Support\Audit;
+use App\Services\FonnteService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Bus;
 
 class BroadcastController extends Controller
 {
-    public function send(Request $request)
+    public function send(Request $request, FonnteService $fonnte)
     {
         $data = $request->validate(['audience' => 'required|in:all,active,isolated,unpaid', 'message' => 'required|string|max:1000']);
-        if (!config('services.fonnte.token')) {
-            return back()->with('error', 'Isi FONNTE_TOKEN di .env sebelum mengirim broadcast.');
+        if (! $fonnte->isConfigured()) {
+            return back()->with('error', 'Aktifkan koneksi Fonnte dan isi API Token di pengaturan WhatsApp terlebih dahulu.');
         }
 
         $customers = Customer::query()->whereNotNull('phone')->where('phone', '!=', '');
