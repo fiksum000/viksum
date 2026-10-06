@@ -8,10 +8,14 @@ Route::get('/login', [AuthController::class, 'loginForm'])->name('login');
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1')->name('login.attempt');
 Route::get('/pay/{token}', [PublicPaymentController::class, 'show'])->middleware('throttle:30,1')->name('public.pay');
 Route::post('/pay/{token}', [PublicPaymentController::class, 'create'])->middleware('throttle:10,1')->name('public.pay.create');
-Route::get('/isolir', function () {\n    return session('customer_id') ? redirect()->route('portal.isolated') : redirect()->route('portal.login');\n})->name('public.isolated');\nRoute::get('/portal/login', [CustomerPortalController::class, 'loginForm'])->name('portal.login');
+Route::get('/isolir', function () {
+    return session('customer_id') ? redirect()->route('portal.isolated') : redirect()->route('portal.login');
+})->name('public.isolated');
+Route::get('/portal/login', [CustomerPortalController::class, 'loginForm'])->name('portal.login');
 Route::post('/portal/login', [CustomerPortalController::class, 'login'])->middleware('throttle:10,1')->name('portal.login.submit');
 Route::middleware('customer.session')->prefix('/portal')->name('portal.')->group(function (): void {
-    Route::get('/', [CustomerPortalController::class, 'home'])->name('home');\n    Route::get('/isolir', [CustomerPortalController::class, 'isolated'])->name('isolated');
+    Route::get('/', [CustomerPortalController::class, 'home'])->name('home');
+    Route::get('/isolir', [CustomerPortalController::class, 'isolated'])->name('isolated');
     Route::get('/invoices/{invoice}', [CustomerPortalController::class, 'invoice'])->name('invoices.show');
     Route::get('/invoices/{invoice}/pdf', [CustomerPortalController::class, 'pdf'])->name('invoices.pdf');
     Route::post('/logout', [CustomerPortalController::class, 'logout'])->name('logout');
@@ -19,7 +23,8 @@ Route::middleware('customer.session')->prefix('/portal')->name('portal.')->group
 
 Route::middleware('auth.session')->group(function (): void {
     Route::get('/', fn () => redirect()->route('dashboard'));
-    Route::get('/dashboard', DashboardController::class)->name('dashboard');\n    Route::get('/dashboard/traffic', DashboardTrafficController::class)->middleware('throttle:10,1')->name('dashboard.traffic');
+    Route::get('/dashboard', DashboardController::class)->name('dashboard');
+    Route::get('/dashboard/traffic', DashboardTrafficController::class)->middleware('throttle:10,1')->name('dashboard.traffic');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     Route::middleware('role:super_admin,admin,operator,technician')->group(function (): void {
