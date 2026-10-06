@@ -141,7 +141,7 @@ class TripayService
 
             $this->assertAvailableChannel($method);
             $customer = $locked->customer;
-            $data = $this->createTransaction($method, $locked->invoice_number, $customer->name, $customer->email ?? '', $locked->total, $customer->phone ?? '', route('public.pay', $locked->public_token));
+            $data = $this->createTransaction($method, $locked->invoice_number, $customer->name, $customer->email ?? '', $locked->total, $customer->whatsapp_number ?: ($customer->phone ?? ''), route('public.pay', $locked->public_token));
             $reference = (string) ($data['reference'] ?? '');
             $checkoutUrl = (string) ($data['checkout_url'] ?? '');
             if ($reference === '' || $checkoutUrl === '') {
