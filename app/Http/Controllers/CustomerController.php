@@ -84,6 +84,7 @@ class CustomerController extends Controller
 
         try {
             $this->syncPppSecret($customer, $routerOs);
+            $feedbackKey = 'success';
             $message = 'Pelanggan ditambahkan dan secret PPP berhasil disimpan di MikroTik.';
         } catch (\Throwable $e) {
             Log::warning('Customer PPP secret sync failed', [
@@ -91,11 +92,12 @@ class CustomerController extends Controller
                 'router_id' => $customer->router_id,
                 'error' => $e->getMessage(),
             ]);
-            $message = 'Data pelanggan tersimpan, tetapi secret PPP gagal disinkronkan ke MikroTik: '.$e->getMessage().' Periksa router lalu simpan ulang pelanggan.';
+            $feedbackKey = 'warning';
+            $message = 'Data pelanggan tersimpan, tetapi secret PPP gagal disinkronkan ke MikroTik: '.$e->getMessage();
         }
 
         return redirect()->route('customers.edit', $customer)
-            ->with('success', $message)
+            ->with($feedbackKey, $message)
             ->with('portal_password_created', $portalPassword);
     }
 
@@ -117,6 +119,7 @@ class CustomerController extends Controller
         }
 
         $previousRouter = $customer->router;
+        $previousServiceType = $customer->service_type;
         $previousUsername = $customer->pppoe_username;
 
         DB::transaction(function () use ($customer, $data, $onuId) {
@@ -132,21 +135,26 @@ class CustomerController extends Controller
 
         try {
             $this->syncPppSecret($customer, $routerOs, $previousUsername);
-            if ($previousRouter && $customer->service_type === 'pppoe'
-                && $previousRouter->id !== $customer->router_id && $previousUsername) {
+            if ($previousRouter && $previousServiceType === 'pppoe'
+                && ($customer->service_type !== 'pppoe' || $previousRouter->id !== $customer->router_id || $previousUsername !== $customer->pppoe_username)
+                && $previousUsername) {
                 $routerOs->deletePppSecret($previousRouter, $previousUsername);
             }
-            $message = 'Pelanggan diperbarui dan secret PPP berhasil disinkronkan ke MikroTik.';
+            $feedbackKey = 'success';
+            $message = $customer->service_type === 'pppoe'
+                ? 'Pelanggan diperbarui dan secret PPP berhasil disinkronkan ke MikroTik.'
+                : 'Data pelanggan diperbarui.';
         } catch (\Throwable $e) {
             Log::warning('Customer PPP secret sync failed', [
                 'customer_id' => $customer->id,
                 'router_id' => $customer->router_id,
                 'error' => $e->getMessage(),
             ]);
-            $message = 'Data pelanggan tersimpan, tetapi secret PPP gagal disinkronkan ke MikroTik: '.$e->getMessage().' Periksa router lalu simpan ulang pelanggan.';
+            $feedbackKey = 'warning';
+            $message = 'Data pelanggan tersimpan, tetapi secret PPP gagal disinkronkan ke MikroTik: '.$e->getMessage();
         }
 
-        return redirect()->route('customers.edit', $customer)->with('success', $message);
+        return redirect()->route('customers.edit', $customer)->with($feedbackKey, $message);
     }
 
     private function syncPppSecret(Customer $customer, RouterOsService $routerOs, ?string $previousUsername = null): void
@@ -222,7 +230,7 @@ class CustomerController extends Controller
             'due_day' => 'required|integer|min:1|max:28',
             'grace_days' => 'nullable|integer|min:0|max:31',
             'activated_at' => 'nullable|date',
-            'router_id' => [$service === 'pppoe' ? 'required' : 'nullable', 'nullable', 'exists:routers,id'],
+            'router_id' => [$service === 'pppoe' ? 'required' : 'nullable', 'exists:routers,id'],
             'package_id' => [$creating ? 'required' : 'nullable', 'exists:packages,id'],
             'pppoe_username' => [$service === 'pppoe' ? 'required' : 'nullable', 'max:120', Rule::unique('customers', 'pppoe_username')->ignore($customer?->id)],
             'pppoe_password' => [$service === 'pppoe' && $creating ? 'required' : 'nullable', 'string', 'max:255'],
