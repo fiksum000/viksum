@@ -54,7 +54,16 @@ class CustomerPortalController extends Controller
         return view('portal.home', compact('customer', 'invoices', 'fup'));
     }
 
-    public function isolated(Request $request)\n    {\n        $customer = $request->attributes->get('billing_customer');\n        abort_unless($customer->status === 'isolated', 404);\n        $invoice = $customer->invoices()->where('status', 'unpaid')->latest('due_date')->first();\n\n        return view('portal.isolated', compact('customer', 'invoice'));\n    }\n\n    public function invoice(Request $request, Invoice $invoice)
+    public function isolated(Request $request)
+    {
+        $customer = $request->attributes->get('billing_customer');
+        abort_unless($customer->status === 'isolated', 404);
+        $invoice = $customer->invoices()->where('status', 'unpaid')->latest('due_date')->first();
+
+        return view('portal.isolated', compact('customer', 'invoice'));
+    }
+
+    public function invoice(Request $request, Invoice $invoice)
     {
         $customer = $request->attributes->get('billing_customer');
         abort_unless($invoice->customer_id === $customer->id, 404);
