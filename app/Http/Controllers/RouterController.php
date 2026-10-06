@@ -5,6 +5,7 @@ class RouterController extends Controller { public function index()
     {
         $billingUrl = rtrim((string) config('app.url'), '/');
         $billingHost = parse_url($billingUrl, PHP_URL_HOST) ?: 'billing.example.com';
+        $isolationProfile = (string) config('billing.isolation_profile', 'ISOLIR');
         $isolationScript = <<<'ROUTEROS'
 # Setup halaman isolir Billing RTRW Net
 # APP_URL: __BILLING_URL__
@@ -12,9 +13,9 @@ class RouterController extends Controller { public function index()
 /export file=before-fiksum-isolir
 
 # Profile ISOLIR menandai IP pelanggan terisolir pada address-list
-:local isolirProfile [/ppp profile find where name="ISOLIR"]
+:local isolirProfile [/ppp profile find where name="__ISOLATION_PROFILE__"]
 :if ([:len $isolirProfile] = 0) do={
-    /ppp profile add name="ISOLIR" address-list="FIKSUM-ISOLIR" rate-limit=64k/64k
+    /ppp profile add name="__ISOLATION_PROFILE__" address-list="FIKSUM-ISOLIR" rate-limit=64k/64k
 } else={
     /ppp profile set $isolirProfile address-list="FIKSUM-ISOLIR"
 }
@@ -39,8 +40,8 @@ class RouterController extends Controller { public function index()
 /ip proxy access disable [find where comment="DENY OTHER THAN THE ISOLIR IP THAT GOES TO THE WEB PROXY BY MS"]
 ROUTEROS;
         $isolationScript = str_replace(
-            ['__BILLING_URL__', '__ISOLATION_URL__', '__BILLING_HOST__'],
-            [$billingUrl, $billingUrl.'/isolir', $billingHost],
+            ['__BILLING_URL__', '__ISOLATION_URL__', '__BILLING_HOST__', '__ISOLATION_PROFILE__'],
+            [$billingUrl, $billingUrl.'/isolir', $billingHost, $isolationProfile],
             $isolationScript
         );
 
@@ -48,5 +49,6 @@ ROUTEROS;
             'routers' => Router::latest()->get(),
             'isolationScript' => $isolationScript,
             'billingHost' => $billingHost,
+            'isolationMethod' => config('billing.isolation_method', 'profile'),
         ]);
     } public function store(Request $r){$d=$r->validate(['name'=>'required|max:100','host'=>'required|max:255','port'=>'required|integer|min:1|max:65535','username'=>'required|max:100','password'=>'required','ssl'=>'nullable|boolean','enabled'=>'nullable|boolean','notes'=>'nullable','traffic_interface'=>'nullable|max:120','traffic_interface'=>'nullable|max:120','traffic_interface'=>'nullable|max:120']);Router::create($d);return back()->with('success','Router disimpan.');} public function update(Request $r,Router $router){$d=$r->validate(['name'=>'required|max:100','host'=>'required|max:255','port'=>'required|integer|min:1|max:65535','username'=>'required|max:100','password'=>'nullable','ssl'=>'nullable|boolean','enabled'=>'nullable|boolean','notes'=>'nullable']);if($d['password']==='')unset($d['password']);$router->update($d);return back()->with('success','Router diperbarui.');} public function updateTrafficInterface(Request $r,Router $router){$d=$r->validate(['traffic_interface'=>'required|string|max:120']);$router->update($d);return back()->with('success','Interface trafik router diperbarui.');} public function test(Router $router,RouterOsService $api){$r=$api->testConnection($router);return back()->with($r['ok']?'success':'error',$r['ok']?'Koneksi berhasil. Identity/resource terbaca.':'Koneksi gagal: '.$r['error']);} public function destroy(Router $router){$router->delete();return back()->with('success','Router dihapus.');}}
