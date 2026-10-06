@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Customer;
 use App\Models\Invoice;
+use App\Services\FupService;
 use App\Support\Audit;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Cache\RateLimiter;
@@ -48,12 +49,12 @@ class CustomerPortalController extends Controller
     {
         $customer = $request->attributes->get('billing_customer')->load(['package', 'router', 'onu.olt']);
         $invoices = $customer->invoices()->latest('period')->limit(12)->get();
-        $fup = $customer->fupState()->where('period', now(config('billing.timezone'))->format('Y-m'))->first();
+        $fup = $customer->fupState()->where('period', app(FupService::class)->currentPeriod())->first();
 
         return view('portal.home', compact('customer', 'invoices', 'fup'));
     }
 
-    public function invoice(Request $request, Invoice $invoice)
+    public function isolated(Request $request)\n    {\n        $customer = $request->attributes->get('billing_customer');\n        abort_unless($customer->status === 'isolated', 404);\n        $invoice = $customer->invoices()->where('status', 'unpaid')->latest('due_date')->first();\n\n        return view('portal.isolated', compact('customer', 'invoice'));\n    }\n\n    public function invoice(Request $request, Invoice $invoice)
     {
         $customer = $request->attributes->get('billing_customer');
         abort_unless($invoice->customer_id === $customer->id, 404);
