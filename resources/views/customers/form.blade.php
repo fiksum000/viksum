@@ -18,12 +18,10 @@
     <section class="card card-body">
         <h2 class="h5">Detail pengguna billing</h2>
         <div class="row g-3">
-            <div class="col-md-4"><label for="customer_code" class="form-label">Kode pelanggan</label><input id="customer_code" name="customer_code" class="form-control" maxlength="50" value="{{ old('customer_code', $customer->customer_code) }}" placeholder="Otomatis jika dikosongkan"><div class="form-text">Kode ini juga dipakai untuk login portal pelanggan.</div></div>
+            <div class="col-md-4"><label for="customer_code" class="form-label">Kode pelanggan</label><input id="customer_code" name="customer_code" class="form-control" maxlength="50" value="{{ old('customer_code', $customer->customer_code) }}" readonly><div class="form-text">Dibuat otomatis dan unik oleh sistem. Kode ini juga dipakai untuk login portal pelanggan.</div></div>
             <div class="col-md-4"><label for="name" class="form-label">Nama <span class="text-danger">*</span></label><input id="name" name="name" class="form-control" maxlength="120" value="{{ old('name', $customer->name) }}" required></div>
             <div class="col-md-4"><label for="area" class="form-label">Area <span class="text-danger">*</span></label><input id="area" name="area" class="form-control" maxlength="120" value="{{ old('area', $customer->area) }}" placeholder="Contoh: M IKIN" {{ $creating ? 'required' : '' }}><div class="form-text">Nama area bebas; data lama boleh tetap kosong.</div></div>
             <div class="col-md-4"><label for="whatsapp_number" class="form-label">WhatsApp</label><input id="whatsapp_number" name="whatsapp_number" class="form-control" maxlength="30" value="{{ old('whatsapp_number', $customer->whatsapp_number) }}" placeholder="628xxxxxxxxxx"><div class="form-text">Untuk notifikasi, gunakan format internasional tanpa tanda +. Nomor lama tetap dipakai sebagai cadangan.</div></div>
-            <div class="col-md-4"><label for="phone" class="form-label">Nomor telepon</label><input id="phone" name="phone" class="form-control" maxlength="30" value="{{ old('phone', $customer->phone) }}" placeholder="Nomor telepon biasa"></div>
-            <div class="col-md-4"><label for="email" class="form-label">Email</label><input id="email" name="email" type="email" class="form-control" value="{{ old('email', $customer->email) }}"></div>
             <div class="col-md-4"><label for="registered_at" class="form-label">Tanggal daftar</label><input id="registered_at" name="registered_at" type="date" class="form-control" value="{{ old('registered_at', $customer->registered_at?->format('Y-m-d') ?? ($creating ? now()->format('Y-m-d') : '')) }}"></div>
             <div class="col-12"><label for="address" class="form-label">Alamat</label><textarea id="address" name="address" rows="2" class="form-control">{{ old('address', $customer->address) }}</textarea></div>
             <div class="col-12"><label for="notes" class="form-label">Catatan tambahan</label><textarea id="notes" name="notes" rows="2" maxlength="5000" class="form-control">{{ old('notes', $customer->notes) }}</textarea></div>
@@ -33,7 +31,6 @@
             <div class="col-md-3"><label class="form-label" for="district">Kecamatan</label><input id="district" name="district" class="form-control" value="{{ old('district', $customer->district) }}"></div>
             <div class="col-md-2"><label class="form-label" for="city">Kabupaten / Kota</label><input id="city" name="city" class="form-control" value="{{ old('city', $customer->city) }}"></div>
             <div class="col-md-4"><label class="form-label" for="ktp_number">NIK</label><input id="ktp_number" name="ktp_number" class="form-control" maxlength="50" value="{{ old('ktp_number') }}" autocomplete="off"><div class="form-text">Disimpan terenkripsi. Kosongkan untuk mempertahankan data saat edit.</div></div>
-            <div class="col-md-4"><label class="form-label" for="npwp">NPWP</label><input id="npwp" name="npwp" class="form-control" maxlength="50" value="{{ old('npwp') }}" autocomplete="off"><div class="form-text">Disimpan terenkripsi. Kosongkan untuk mempertahankan data saat edit.</div></div>
         </div>
     </section>
 
@@ -44,7 +41,7 @@
             <div class="col-md-4"><label class="form-label" for="latitude">Latitude</label><input id="latitude" name="latitude" type="number" step="any" class="form-control" value="{{ old('latitude', $customer->latitude) }}" placeholder="-0.9345797"></div>
             <div class="col-md-4"><label class="form-label" for="longitude">Longitude</label><input id="longitude" name="longitude" type="number" step="any" class="form-control" value="{{ old('longitude', $customer->longitude) }}" placeholder="100.226458"></div>
             <div class="col-md-4 d-flex flex-wrap gap-2"><button class="btn btn-outline-light" type="button" id="use-location">Gunakan lokasi saya</button><a class="btn btn-outline-info d-none" id="google-maps-link" target="_blank" rel="noopener">Buka Google Maps</a></div>
-            <div class="col-12"><div class="small" id="location-status" role="status"></div></div>
+            <div class="col-12"><div class="small" id="location-status" role="status"></div><div class="form-text">Alamat mengikuti data OpenStreetMap; detail RT/RW hanya terisi bila tersedia. © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>.</div></div>
         </div>
     </section>
 
@@ -62,9 +59,9 @@
             <div class="col-md-4"><label class="form-label" for="pppoe_mac">MAC address terkunci</label><input id="pppoe_mac" name="pppoe_mac" class="form-control" value="{{ old('pppoe_mac', $customer->pppoe_mac) }}" placeholder="AA:BB:CC:DD:EE:FF"></div>
             <div class="col-md-4"><label class="form-label" for="pppoe_profile_normal">Profil normal PPP</label><input id="pppoe_profile_normal" name="pppoe_profile_normal" class="form-control" value="{{ old('pppoe_profile_normal', $customer->pppoe_profile_normal) }}"></div>
             <div class="col-md-4"><label class="form-label" for="pppoe_profile_isolir">Profil isolir PPP</label><input id="pppoe_profile_isolir" name="pppoe_profile_isolir" class="form-control" value="{{ old('pppoe_profile_isolir', $customer->pppoe_profile_isolir ?: 'ISOLIR') }}"></div>
-            <div class="col-md-4"><label class="form-label" for="portal_password">Password portal pelanggan</label><input id="portal_password" name="portal_password" type="password" class="form-control" minlength="8" autocomplete="new-password" placeholder="{{ $creating ? 'Opsional, minimal 8 karakter' : 'Kosongkan jika tidak diubah' }}"></div>
+            <div class="col-md-4"><label class="form-label" for="portal_password">Password portal pelanggan</label><input id="portal_password" name="portal_password" type="text" class="form-control" minlength="8" autocomplete="new-password" value="{{ old('portal_password', $creating ? ($portalPassword ?? '') : '') }}" placeholder="{{ $creating ? '' : 'Kosongkan jika tidak diubah' }}"><div class="form-text">{{ $creating ? 'Dibuat acak otomatis dan ditampilkan agar mudah disalin.' : 'Password lama tidak dapat ditampilkan. Isi hanya jika ingin menggantinya.' }}</div></div>
         </div>
-        <div class="form-text mt-2">Pembuatan pelanggan menyimpan data ke aplikasi. Pengiriman secret PPP ke MikroTik perlu dikonfigurasi terpisah.</div>
+        <div class="form-text mt-2">Saat disimpan, username dan password PPPoE disinkronkan ke menu PPP → Secrets pada router yang dipilih.</div>
     </section>
 
     <section class="card card-body">
@@ -108,6 +105,15 @@
     <div class="d-flex gap-2 mb-4"><button class="btn btn-primary" type="submit">{{ $creating ? 'Simpan pelanggan' : 'Simpan perubahan' }}</button><a href="{{ route('customers.index') }}" class="btn btn-outline-light">Batal</a></div>
 </form>
 
+@if(session('portal_password_created'))
+<div class="alert alert-success d-flex flex-wrap align-items-center gap-2" role="status">
+    <div><strong>Password portal dibuat.</strong> Simpan sekarang; untuk keamanan, password tidak bisa ditampilkan lagi setelah halaman ini.</div>
+    <input id="created-portal-password" class="form-control" style="max-width: 280px" value="{{ session('portal_password_created') }}" readonly aria-label="Password portal yang dibuat">
+    <button class="btn btn-outline-light" type="button" id="copy-portal-password">Salin password</button>
+</div>
+@endif
+@if(session('warning'))<div class="alert alert-warning" role="alert">{{ session('warning') }}</div>@endif
+
 <script>
 (() => {
     const latitude = document.getElementById('latitude');
@@ -122,26 +128,73 @@
     latitude.addEventListener('input', refreshMap);
     longitude.addEventListener('input', refreshMap);
     refreshMap();
-    document.getElementById('use-location').addEventListener('click', () => {
+    const locationButton = document.getElementById('use-location');
+    let lastGeocodeAt = 0;
+    const reverseGeocode = async (lat, lon) => {
+        const wait = Math.max(0, 1000 - (Date.now() - lastGeocodeAt));
+        if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+        lastGeocodeAt = Date.now();
+        const url = new URL('https://nominatim.openstreetmap.org/reverse');
+        url.search = new URLSearchParams({format: 'jsonv2', addressdetails: '1', lat, lon}).toString();
+        const response = await fetch(url, {headers: {Accept: 'application/json'}});
+        if (!response.ok) throw new Error('Layanan pencarian alamat tidak merespons.');
+        const result = await response.json();
+        const parts = result.address || {};
+        const setIfPresent = (id, ...values) => {
+            const value = values.find((item) => typeof item === 'string' && item.trim());
+            if (value) document.getElementById(id).value = value;
+        };
+        setIfPresent('address', result.display_name);
+        setIfPresent('rt', parts['street_number']);
+        setIfPresent('rw', parts['residential']);
+        setIfPresent('village', parts.village, parts.suburb, parts.hamlet, parts.town);
+        setIfPresent('district', parts.city_district, parts.district, parts.county);
+        setIfPresent('city', parts.city, parts.municipality, parts.town, parts.state_district);
+    };
+    locationButton.addEventListener('click', () => {
         if (!navigator.geolocation) { locationStatus.textContent = 'Browser ini tidak mendukung akses lokasi.'; return; }
+        locationButton.disabled = true;
         locationStatus.textContent = 'Meminta izin lokasi dari browser…';
-        navigator.geolocation.getCurrentPosition(({coords}) => {
+        navigator.geolocation.getCurrentPosition(async ({coords}) => {
             latitude.value = coords.latitude.toFixed(7);
             longitude.value = coords.longitude.toFixed(7);
             refreshMap();
-            locationStatus.textContent = 'Lokasi berhasil diisi.';
+            locationStatus.textContent = 'Koordinat tersimpan. Mencari alamat…';
+            try {
+                await reverseGeocode(latitude.value, longitude.value);
+                locationStatus.textContent = 'Lokasi dan alamat berhasil diisi. Silakan periksa kembali RT/RW dan alamat.';
+            } catch (error) {
+                locationStatus.textContent = 'Koordinat berhasil diisi, tetapi alamat tidak ditemukan otomatis. Isi alamat secara manual lalu coba lagi.';
+            } finally {
+                locationButton.disabled = false;
+            }
         }, (error) => {
             locationStatus.textContent = error.code === 1 ? 'Izin lokasi ditolak. Izinkan lokasi di browser lalu coba lagi.' : 'Lokasi tidak tersedia. Periksa izin dan koneksi perangkat.';
+            locationButton.disabled = false;
         }, {enableHighAccuracy: true, timeout: 15000, maximumAge: 60000});
+    });
+    const copyButton = document.getElementById('copy-portal-password');
+    copyButton?.addEventListener('click', async () => {
+        const password = document.getElementById('created-portal-password');
+        try {
+            await navigator.clipboard.writeText(password.value);
+            copyButton.textContent = 'Tersalin';
+        } catch {
+            password.select();
+            document.execCommand('copy');
+            copyButton.textContent = 'Tersalin';
+        }
     });
 
     const service = document.getElementById('service_type');
     const creating = document.querySelector('form[data-creating]').dataset.creating === '1';
+    const routerSelect = document.getElementById('router_id');
     const setServiceFields = () => {
         const isPppoe = service.value === 'pppoe';
         document.querySelectorAll('.pppoe-field').forEach((el) => el.classList.toggle('d-none', !isPppoe));
         document.querySelectorAll('.hotspot-field').forEach((el) => el.classList.toggle('d-none', isPppoe));
         document.getElementById('pppoe_username').required = isPppoe;
+        routerSelect.required = isPppoe;
         document.getElementById('hotspot_username').required = !isPppoe;
         document.getElementById('pppoe_password').required = creating && isPppoe;
         document.getElementById('hotspot_password').required = creating && !isPppoe;
