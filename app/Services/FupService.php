@@ -29,7 +29,8 @@ class FupService
         $period = $this->currentPeriod();
         $activeMaps = [];
 
-        $this->restoreDisabledCustomers($period);\n        $this->restoreExpiredCycleStates($period);
+        $this->restoreDisabledCustomers($period);
+        $this->restoreExpiredCycleStates($period);
 
         Customer::with(['router', 'package'])
             ->where('status', 'active')
@@ -142,13 +143,14 @@ class FupService
                             'details' => 'Profil normal dipulihkan setelah siklus FUP tanggal 10 berganti',
                             'created_at' => now(), 'updated_at' => now(),
                         ]);
-                    } catch (\\Throwable $exception) {
+                    } catch (\Throwable $exception) {
                         report($exception);
                     }
                 }
             });
     }
-\n    private function restoreDisabledCustomers(string $period): void
+
+    private function restoreDisabledCustomers(string $period): void
     {
         FupState::with(['customer.router', 'customer.package'])
             ->where('period', $period)
