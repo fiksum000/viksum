@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Controllers\{AuthController, BroadcastController, CustomerController, CustomerImportExportController, CustomerPortalController, DashboardController, DashboardTrafficController, HotspotController, InvoiceController, InvoicePdfController, PackageController, PaymentController, PublicPaymentController, PublicRegistrationController, ReportsController, RouterController, UserController, WaTemplateController};
+use App\Http\Controllers\{AuthController, BroadcastController, CustomerController, CustomerImportExportController, CustomerPortalController, DashboardController, DashboardTrafficController, HotspotController, InvoiceController, InvoicePdfController, PackageController, PaymentController, PublicPaymentController, PublicRegistrationController, ReportsController, RouterController, RouterReadController, UserController, WaTemplateController};
 use App\Http\Controllers\{OltController, OnuController, PaymentSettingsController};
 use Illuminate\Support\Facades\Route;
 
@@ -70,6 +70,7 @@ Route::middleware('auth.session')->group(function (): void {
         Route::get('/onus', [OnuController::class, 'index'])->name('onus.index');
         Route::get('/hotspot', [HotspotController::class, 'index'])->name('hotspot.index');
         Route::get('/routers/{router}/hotspot-active', [HotspotController::class, 'active'])->name('hotspot.active');
+        Route::get('/network/{page}', [RouterReadController::class, 'show'])->where('page', 'pppoe\\.(secrets|active|offline|profiles)|hotspot\\.(users|active-users|profiles)')->name('network.read');
     });
 
     Route::middleware('role:super_admin,admin')->group(function (): void {
