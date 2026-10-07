@@ -18,11 +18,18 @@
             @foreach($packagesNeedingMapping as $package)
                 <li>
                     <strong>{{ $package->name }}</strong>:
-                    @if(!$package->router_id || blank($package->normal_profile))
-                        profil normal belum ditautkan ke router.
+                    @if(!$package->router_id)
+                        Router belum ditautkan; profil normal “{{ $package->normal_profile }}” belum diverifikasi di router.
+                        @if($package->fup_enabled && filled($package->fup_speed_after))
+                            Profil FUP “{{ $package->fup_speed_after }}” juga belum diverifikasi di router.
+                        @elseif($package->fup_enabled)
+                            Profil setelah FUP belum dipilih.
+                        @endif
+                    @elseif(blank($package->normal_profile))
+                        Profil normal belum dipilih.
                     @endif
-                    @if($package->fup_enabled && blank($package->fup_speed_after))
-                        FUP aktif tetapi profil setelah FUP belum dipilih.
+                    @if($package->router_id && $package->fup_enabled && blank($package->fup_speed_after))
+                        Profil setelah FUP belum dipilih.
                     @endif
                 </li>
             @endforeach
@@ -71,12 +78,14 @@
                 @forelse($packages as $package)
                     <tr>
                         <td><strong>{{ $package->name }}</strong><br><span class="text-muted">Rp {{ number_format($package->price, 0, ',', '.') }}/bulan</span></td>
-                        <td>{{ $package->router?->name ?? 'Belum ditautkan' }}<br><code>{{ $package->normal_profile }}</code></td>
+                        <td>{{ $package->router?->name ?? 'Belum ditautkan' }}<br><code>{{ $package->normal_profile }}</code>@if(!$package->router_id)<br><span class="text-warning">Belum diverifikasi di router</span>@endif</td>
                         <td>
                             @if(!$package->fup_enabled)
                                 Tidak aktif
                             @elseif(blank($package->fup_speed_after))
                                 <span class="text-warning">Aktif — profil FUP belum dipilih</span>
+                            @elseif(!$package->router_id)
+                                <span class="text-warning">Aktif — <code>{{ $package->fup_speed_after }}</code> belum diverifikasi di router</span>
                             @else
                                 Aktif<br><code>{{ $package->fup_speed_after }}</code>
                             @endif
