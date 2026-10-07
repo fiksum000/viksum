@@ -1,13 +1,13 @@
 <?php
 
-namespace Tests\\Feature;
+namespace Tests\Feature;
 
-use App\\Models\\IntegrationSetting;
-use App\\Models\\User;
-use Illuminate\\Foundation\\Testing\\RefreshDatabase;
-use Illuminate\\Http\\Client\\Request;
-use Illuminate\\Support\\Facades\\Http;
-use Tests\\TestCase;
+use App\Models\IntegrationSetting;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
+use Tests\TestCase;
 
 class WhatsAppGatewayConnectionTest extends TestCase
 {
