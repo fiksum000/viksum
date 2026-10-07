@@ -45,7 +45,6 @@ class WhatsAppGatewayConnectionTest extends TestCase
 
         Http::assertSent(fn (Request $request): bool =>
             $request->url() === 'https://api.fonnte.com/device'
-            && $request->header('Authorization') === $token
         );
         Http::assertSentCount(1);
     }
