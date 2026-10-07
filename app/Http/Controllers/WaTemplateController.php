@@ -19,7 +19,7 @@ class WaTemplateController extends Controller
         return view('whatsapp.index', [
             'templates' => WaTemplate::orderBy('name')->get(),
             'settings' => $settings,
-            'fonnteConfigured' => app(FonnteService::class)->isConfigured(),
+            'hasFonnteToken' => filled($settings?->fonnte_api_token ?: config('services.fonnte.token')),
             'webhookUrl' => $settings?->fonnte_webhook_token ? route('fonnte.webhook', $settings->fonnte_webhook_token) : null,
             'incomingLogs' => WaLog::whereIn('event', ['incoming', 'device_status'])->latest()->limit(20)->get(),
         ]);
@@ -51,6 +51,35 @@ class WaTemplateController extends Controller
         Audit::log('fonnte.connection_updated', IntegrationSetting::class, $settings->id, ['enabled' => $settings->fonnte_enabled]);
 
         return back()->with('success', 'Koneksi Fonnte berhasil disimpan. Webhook URL dapat disalin ke pengaturan perangkat Fonnte.');
+    }
+
+    public function checkConnection(FonnteService $fonnte)
+    {
+        $result = $fonnte->checkDeviceConnection();
+
+        Audit::log('fonnte.connection_checked', IntegrationSetting::class, 1, ['state' => $result['state']]);
+
+        return back()->with('connection_check', $result);
+    }
+
+    public function deleteConnection()
+    {
+        $settings = IntegrationSetting::query()->find(1);
+        if (! $settings) {
+            return back()->with('info', 'Belum ada konfigurasi WhatsApp yang tersimpan.');
+        }
+
+        $settings->forceFill([
+            'fonnte_enabled' => false,
+            'fonnte_account_name' => null,
+            'fonnte_api_token' => null,
+            'fonnte_webhook_token' => null,
+            'updated_by' => session('user_id'),
+        ])->save();
+
+        Audit::log('fonnte.connection_deleted', IntegrationSetting::class, $settings->id);
+
+        return back()->with('success', 'Koneksi dihapus dan pengiriman WhatsApp dinonaktifkan. Log serta template pesan tetap disimpan.');
     }
 
     public function update(Request $request, WaTemplate $template)
