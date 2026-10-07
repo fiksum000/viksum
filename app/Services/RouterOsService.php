@@ -67,6 +67,33 @@ class RouterOsService {
   public function createHotspotUser(Router $router,string $username,string $password,string $profile,string $comment=''):void{$this->client($router)->query((new Query('/ip/hotspot/user/add'))->equal('name',$username)->equal('password',$password)->equal('profile',$profile)->equal('comment',$comment))->read();}
   public function setHotspotUserEnabled(Router $router,string $username,bool $enabled):void{$client=$this->client($router);$rows=$client->query((new Query('/ip/hotspot/user/print'))->where('name',$username))->read();$id=$rows[0]['.id']??null;if(!$id)throw new RuntimeException("Hotspot user {$username} tidak ditemukan.");$client->query((new Query('/ip/hotspot/user/set'))->equal('.id',$id)->equal('disabled',$enabled?'no':'yes'))->read();}
   public function disconnectHotspotActive(Router $router,string $username):void{$client=$this->client($router);$rows=$client->query((new Query('/ip/hotspot/active/print'))->where('user',$username))->read();foreach($rows as $row){if(isset($row['.id']))$client->query((new Query('/ip/hotspot/active/remove'))->equal('.id',$row['.id']))->read();}}
-  public function deleteHotspotUser(Router $router,string $username):void{$client=$this->client($router);$rows=$client->query((new Query('/ip/hotspot/user/print'))->where('name',$username))->read();foreach($rows as $row){if(isset($row['.id']))$client->query((new Query('/ip/hotspot/user/remove'))->equal('.id',$row['.id']))->read();}}
+    public function deleteHotspotUser(Router $router,string $username):void{$client=$this->client($router);$rows=$client->query((new Query('/ip/hotspot/user/print'))->where('name',$username))->read();foreach($rows as $row){if(isset($row['.id']))$client->query((new Query('/ip/hotspot/user/remove'))->equal('.id',$row['.id']))->read();}}
+  /** Read active PPPoE session counters without changing RouterOS state. */
+  public function activePppTrafficMap(Router $router):array
+  {
+    $rows=$this->client($router)->query((new Query('/ppp/active/print'))->equal('stats',''))->read();
+    $out=[];
+    foreach($rows as $row){
+      $name=$row['name']??null;
+      if(!$name || ($row['service']??'pppoe')!=='pppoe') continue;
+      $download=null; $upload=null; $bytes=$row['bytes']??null;
+      if(is_string($bytes) && preg_match('/^(\d+)\/(\d+)$/',$bytes,$matches)){
+        $download=(int)$matches[1]; $upload=(int)$matches[2];
+      } elseif(isset($row['bytes-in'],$row['bytes-out']) && is_numeric($row['bytes-in']) && is_numeric($row['bytes-out'])) {
+        $upload=(int)$row['bytes-in']; $download=(int)$row['bytes-out'];
+      }
+      $out[$name]=['session_id'=>(string)($row['session-id']??''),'caller_id'=>(string)($row['caller-id']??''),'address'=>(string)($row['address']??''),'download_bytes'=>$download,'upload_bytes'=>$upload];
+    }
+    return $out;
+  }
+  /** Read active Hotspot byte counters without changing RouterOS state. */
+  public function activeHotspotTrafficMap(Router $router):array
+  {
+    $out=[];
+    foreach($this->listHotspotActive($router) as $row){
+      $name=$row['user']??null; if(!$name) continue;
+      $out[$name]=['session_id'=>(string)($row['.id']??''),'caller_id'=>(string)($row['mac-address']??''),'address'=>(string)($row['address']??''),'download_bytes'=>is_numeric($row['bytes-out']??null)?(int)$row['bytes-out']:null,'upload_bytes'=>is_numeric($row['bytes-in']??null)?(int)$row['bytes-in']:null];
+    }
+    return $out;
+  }
 }
-
