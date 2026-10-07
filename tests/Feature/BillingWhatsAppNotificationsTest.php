@@ -159,4 +159,3 @@ class BillingWhatsAppNotificationsTest extends TestCase
         ]);
     }
 }
-

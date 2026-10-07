@@ -26,4 +26,3 @@ class InvoicePdfController
             ->download($invoice->invoice_number.'.pdf');
     }
 }
-

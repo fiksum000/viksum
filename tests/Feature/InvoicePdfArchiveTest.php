@@ -80,4 +80,3 @@ class InvoicePdfArchiveTest extends TestCase
         return $invoice;
     }
 }
-

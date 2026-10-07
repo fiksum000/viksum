@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 use App\Models\{Customer, FupState, Onu, Package, Router};
 use App\Services\FupService;
 use App\Services\RouterOsService;
+use App\Services\CustomerQueryService;
 use App\Support\Audit;
 use App\Support\WhatsappNumber;
 use Illuminate\Http\Request;
@@ -15,19 +16,20 @@ use RuntimeException;
 
 class CustomerController extends Controller
 {
-    public function index(Request $r)
+    public function index(Request $r, CustomerQueryService $customerQuery)
     {
-        $q = Customer::with(['package', 'router'])
-            ->when($r->search, fn ($x, $v) => $x->where(fn ($q) => $q
-                ->where('name', 'like', '%'.$v.'%')
-                ->orWhere('customer_code', 'like', '%'.$v.'%')
-                ->orWhere('pppoe_username', 'like', '%'.$v.'%')
-                ->orWhere('phone', 'like', '%'.$v.'%')
-                ->orWhere('whatsapp_number', 'like', '%'.$v.'%')))
-            ->when($r->status, fn ($x, $v) => $x->where('status', $v))
-            ->latest()->paginate(25)->withQueryString();
+        $filters = $r->validate([
+            'search' => ['nullable', 'string', 'max:120'],
+            'status' => ['nullable', 'in:active,isolated,suspended,terminated,trial'],
+            'service_type' => ['nullable', 'in:pppoe,hotspot'],
+            'package_id' => ['nullable', 'integer', 'exists:packages,id'],
+        ]);
+        $q = $customerQuery->filtered($filters)->paginate(25)->withQueryString();
 
-        return view('customers.index', ['customers' => $q]);
+        return view('customers.index', [
+            'customers' => $q,
+            'packages' => Package::orderBy('name')->get(['id', 'name']),
+        ]);
     }
 
     private function formData(Customer $customer): array

@@ -47,4 +47,3 @@ class BillingServiceTest extends TestCase
         $this->assertSame(250000, $invoice->items->sole()->line_total);
     }
 }
-

@@ -90,4 +90,3 @@ class InvoiceArchiveController
             ->deleteFileAfterSend(true);
     }
 }
-

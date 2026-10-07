@@ -88,4 +88,3 @@
 </div>
 <div class="mt-3">{{ $invoices->links() }}</div>
 @endsection
-

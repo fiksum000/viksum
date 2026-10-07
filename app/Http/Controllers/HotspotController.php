@@ -12,9 +12,13 @@ use Illuminate\Support\Str;
 
 class HotspotController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return view('hotspot.index', ['routers' => Router::where('enabled', true)->orderBy('name')->get(), 'vouchers' => HotspotVoucher::with('router')->latest()->paginate(100)]);
+        return view('hotspot.index', [
+            'routers' => Router::where('enabled', true)->orderBy('name')->get(),
+            'vouchers' => HotspotVoucher::with('router')->latest()->paginate(100),
+            'canManageVouchers' => in_array($request->attributes->get('billing_user')?->role, ['super_admin', 'admin'], true),
+        ]);
     }
 
     public function generate(Request $request, RouterOsService $routerOs)

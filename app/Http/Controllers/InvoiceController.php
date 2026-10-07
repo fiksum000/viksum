@@ -124,4 +124,3 @@ class InvoiceController
         return back()->with('success', 'Pengingat tagihan masuk antrean WhatsApp.');
     }
 }
-

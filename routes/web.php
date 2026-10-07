@@ -102,4 +102,3 @@ Route::middleware('auth.session')->group(function (): void {
         Route::post('/invoices/{invoice}/manual-payment', [PaymentController::class, 'manual'])->name('invoices.manual-payment');
     });
 });
-
