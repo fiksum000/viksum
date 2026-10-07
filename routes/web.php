@@ -71,6 +71,7 @@ Route::middleware('auth.session')->group(function (): void {
         Route::get('/hotspot', [HotspotController::class, 'index'])->name('hotspot.index');
         Route::get('/routers/{router}/hotspot-active', [HotspotController::class, 'active'])->name('hotspot.active');
         Route::get('/network/{page}', [RouterReadController::class, 'show'])->where('page', 'pppoe\\.(secrets|active|offline|profiles)|hotspot\\.(users|active-users|profiles)')->name('network.read');
+        Route::get('/routers/{router}/ppp-profiles/options', [RouterReadController::class, 'pppProfileOptions'])->name('routers.ppp-profile-options');
     });
 
     Route::middleware('role:super_admin,admin')->group(function (): void {
@@ -98,4 +99,3 @@ Route::middleware('auth.session')->group(function (): void {
         Route::post('/invoices/{invoice}/manual-payment', [PaymentController::class, 'manual'])->name('invoices.manual-payment');
     });
 });
-
