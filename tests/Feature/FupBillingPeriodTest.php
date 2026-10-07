@@ -27,4 +27,3 @@ class FupBillingPeriodTest extends TestCase
         $this->assertSame('2026-10', $fup->currentPeriod());
     }
 }
-
