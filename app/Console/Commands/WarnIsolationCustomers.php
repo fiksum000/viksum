@@ -48,11 +48,19 @@ class WarnIsolationCustomers extends Command
                     $isolationDate = $warningDate->addDay();
                     $amount = number_format((int) $invoice->total, 0, ',', '.');
                     $paymentUrl = $invoice->payment_url ?: url('/pay/'.$invoice->public_token);
-                    $message = "Halo {$customer->name}, tagihan {$invoice->invoice_number} sebesar Rp {$amount} belum dibayar. Layanan internet akan diisolir pada {$isolationDate->format('d-m-Y')} jika pembayaran belum diterima. Bayar: {$paymentUrl}";
+                    $serviceUsername = $customer->service_type === 'pppoe'
+                        ? $customer->pppoe_username
+                        : $customer->hotspot_username;
+                    $message = "Yth. {$customer->name}, tagihan {$invoice->invoice_number} sebesar Rp {$amount} belum kami terima. Mohon lakukan pembayaran sebelum {$isolationDate->format('d-m-Y')} agar layanan tidak diisolir. ID pelanggan: {$customer->customer_code}. Username layanan: {$serviceUsername}. Pembayaran: {$paymentUrl}. Portal pelanggan: ".route('portal.login')." (ID login: {$customer->customer_code}). Terima kasih.";
 
                     try {
                         if ($notifications->queue($invoice, 'isolation_warning', $target, $message, [
                             'name' => $customer->name,
+                            'customer_code' => $customer->customer_code,
+                            'portal_username' => $customer->customer_code,
+                            'service_username' => $serviceUsername,
+                            'pppoe_username' => $customer->pppoe_username,
+                            'portal_url' => route('portal.login'),
                             'invoice_number' => $invoice->invoice_number,
                             'amount' => $amount,
                             'due_date' => $invoice->due_date->format('d-m-Y'),
