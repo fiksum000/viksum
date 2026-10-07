@@ -12,8 +12,25 @@ class InvoiceController
 {
     public function index(Request $request)
     {
-        $invoices = Invoice::with('customer')->when($request->status, fn ($query, $value) => $query->where('status', $value))->when($request->period, fn ($query, $value) => $query->where('period', $value))->latest('id')->paginate(30)->withQueryString();
-        return view('invoices.index', ['invoices' => $invoices]);
+        $filters = $request->validate([
+            'status' => ['nullable', 'in:draft,unpaid,paid,cancelled,expired'],
+            'period' => ['nullable', 'date_format:Y-m'],
+            'service_type' => ['nullable', 'in:pppoe,hotspot'],
+        ]);
+
+        $invoices = Invoice::with('customer')
+            ->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value))
+            ->when($filters['period'] ?? null, fn ($query, $value) => $query->where('period', $value))
+            ->when($filters['service_type'] ?? null, fn ($query, $value) => $query->whereHas('customer', fn ($customer) => $customer->where('service_type', $value)))
+            ->latest('id')
+            ->paginate(30)
+            ->withQueryString();
+
+        return view('invoices.index', [
+            'invoices' => $invoices,
+            'filters' => $filters,
+            'archivePeriod' => $filters['period'] ?? now(config('billing.timezone'))->format('Y-m'),
+        ]);
     }
 
     public function generate(Request $request, BillingService $billing)
