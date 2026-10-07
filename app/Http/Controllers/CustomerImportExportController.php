@@ -130,7 +130,7 @@ class CustomerImportExportController
                     'pppoe_username' => $service === 'pppoe' ? $username : null,
                     'hotspot_username' => $service === 'hotspot' ? $username : null,
                     'pppoe_profile_normal' => $service === 'pppoe' ? ($data['pppoe_profile_normal'] ?? $package?->normal_profile) : null,
-                    'pppoe_profile_isolir' => $data['pppoe_profile_isolir'] ?? null,
+                    'pppoe_profile_isolir' => $data['pppoe_profile_isolir'] ?? 'ISOLIR',
                     'pppoe_ip' => $data['pppoe_ip'] ?? null,
                     'pppoe_mac' => $data['pppoe_mac'] ?? null,
                     'modem_device' => $data['modem_device'] ?? null,
