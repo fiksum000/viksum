@@ -90,4 +90,50 @@ class RestoreEncryptedBackup extends Command
             $this->error($exception->getMessage());
             return self::FAILURE;
         } finally {
-            $this->removeTem}üÒÚ$z{-®éÜj×TW†6WF–öâ‚uF–F²&—6ÖVçVÆ—2f–ÆRrâFVçG'’âr¶R7F÷&vRâr“²Ð¢F6÷–VBÒ7G&VÕö6÷•÷Fõ÷7G&VÒ‚F6öçFVçG2ÂGF&vWB“°¢f6Æ÷6R‚F6öçFVçG2“°¢f6Æ÷6R‚GF&vWB“°¢–b‚F6÷–VBÓÓÒfÇ6R’²G¦—Óæ6Æ÷6R‚“²F‡&÷ræWrÅ'VçF–ÖTW†6WF–öâ‚tvvÂÖV×VÆ–†¶âf–ÆRrâFVçG'’“²Ð¢Ð¢G¦—Óæ6Æ÷6R‚“°¢Ð ¢&—fFRgVæ7F–öâ76W'Dæõ7–ÖÆ–æµ&VçG2‡7G&–ærG&ö÷BÂ7G&–ærFF—&V7F÷'’“¢fö–@¢°¢G&ö÷BÒ'G&–Ò‚G&ö÷BÂD•$T5Dõ%•õ4U$Dõ"“°¢FF—&V7F÷'’Ò'G&–Ò‚FF—&V7F÷'’ÂD•$T5Dõ%•õ4U$Dõ"“°¢–b‚FF—&V7F÷'’ÓÒG&ö÷Bbb7G%÷7F'G5÷v—F‚‚FF—&V7F÷'’ÂG&ö÷BäD•$T5Dõ%•õ4U$Dõ"’’F‡&÷ræWrÅ'VçF–ÖTW†6WF–öâ‚u&W7F÷&RÖVæöÆ²F‚F’ÇV"7F÷&vRöâr“°¢F7W'6÷"ÒG&ö÷C°¢f÷&V6‚†'&•öf–ÇFW"†W‡ÆöFR„D•$T5Dõ%•õ4U$Dõ"Â7V'7G"‚FF—&V7F÷'’Â7G&ÆVâ‚G&ö÷B’²’’’2G'B’°¢F7W'6÷"ãÒD•$T5Dõ%•õ4U$Dõ"âG'C°¢–b†—5öÆ–æ²‚F7W'6÷"’’F‡&÷ræWrÅ'VçF–ÖTW†6WF–öâ‚u&W7F÷&RÖVæöÆ²F—&V·F÷&’7–ÖÆ–æ²F’7F÷&vRâr“°¢Ð¢Ð ¢&—fFRgVæ7F–öâ&VÖ÷fUFV×÷&'”F—&V7F÷'’‡7G&–ærFF—&V7F÷'’“¢fö–@¢°¢f÷&V6‚†vÆö"‚FF—&V7F÷'’ârò¢r’ó¢µÒ2F—FVÒ’°¢–b†—5öF—"‚F—FVÒ’bb—5öÆ–æ²‚F—FVÒ’’GF†—2Óç&VÖ÷fUFV×÷&'”F—&V7F÷'’‚F—FVÒ“°¢VÇ6RVæÆ–æ²‚F—FVÒ“°¢Ð¢&ÖF—"‚FF—&V7F÷'’“°¢Ð§Ð
+            $this->removeTemporaryDirectory($temporary);
+        }
+    }
+
+    private function restoreStorageFiles(string $zipPath, array $entries): void
+    {
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath) !== true) throw new \RuntimeException('Arsip tidak dapat dibuka lagi untuk pemulihan file.');
+        foreach ($entries as [$entry, $relative]) {
+            $destination = base_path($relative);
+            $directory = dirname($destination);
+            $this->assertNoSymlinkParents(storage_path('app'), $directory);
+            if (! is_dir($directory) && ! mkdir($directory, 0750, true) && ! is_dir($directory)) { $zip->close(); throw new \RuntimeException('Folder storage gagal dibuat.'); }
+            if (is_link($destination)) { $zip->close(); throw new \RuntimeException('Restore menolak target symlink di storage.'); }
+            $contents = $zip->getStream($entry);
+            if (! is_resource($contents)) { $zip->close(); throw new \RuntimeException('Gagal membuka file '.$entry.' dari arsip.'); }
+            $target = fopen($destination, 'wb');
+            if (! $target) { fclose($contents); $zip->close(); throw new \RuntimeException('Tidak bisa menulis file '.$entry.' ke storage.'); }
+            $copied = stream_copy_to_stream($contents, $target);
+            fclose($contents);
+            fclose($target);
+            if ($copied === false) { $zip->close(); throw new \RuntimeException('Gagal memulihkan file '.$entry); }
+        }
+        $zip->close();
+    }
+
+    private function assertNoSymlinkParents(string $root, string $directory): void
+    {
+        $root = rtrim($root, DIRECTORY_SEPARATOR);
+        $directory = rtrim($directory, DIRECTORY_SEPARATOR);
+        if ($directory !== $root && ! str_starts_with($directory, $root.DIRECTORY_SEPARATOR)) throw new \RuntimeException('Restore menolak path di luar storage/app.');
+        $cursor = $root;
+        foreach (array_filter(explode(DIRECTORY_SEPARATOR, substr($directory, strlen($root) + 1))) as $part) {
+            $cursor .= DIRECTORY_SEPARATOR.$part;
+            if (is_link($cursor)) throw new \RuntimeException('Restore menolak direktori symlink di storage.');
+        }
+    }
+
+    private function removeTemporaryDirectory(string $directory): void
+    {
+        foreach (glob($directory.'/*') ?: [] as $item) {
+            if (is_dir($item) && ! is_link($item)) $this->removeTemporaryDirectory($item);
+            else @unlink($item);
+        }
+        @rmdir($directory);
+    }
+}
