@@ -49,15 +49,15 @@
         <h2 class="h5">Layanan dan data login</h2>
         <div class="row g-3">
             <div class="col-md-4"><label class="form-label" for="service_type">Jenis layanan <span class="text-danger">*</span></label><select id="service_type" name="service_type" class="form-select" required><option value="pppoe" @selected(old('service_type', $customer->service_type ?: 'pppoe') === 'pppoe')>PPPoE</option><option value="hotspot" @selected(old('service_type', $customer->service_type) === 'hotspot')>Hotspot</option></select></div>
-            <div class="col-md-4"><label class="form-label" for="package_id">Paket billing <span class="text-danger">*</span></label><select id="package_id" name="package_id" class="form-select" {{ $creating ? 'required' : '' }}><option value="">Pilih paket</option>@foreach($packages as $p)<option value="{{ $p->id }}" data-fup-enabled="{{ $p->fup_enabled ? '1' : '0' }}" data-fup-limit="{{ $p->fup_limit_bytes ?? '' }}" data-fup-speed="{{ $p->fup_speed_after ?? '' }}" data-normal-profile="{{ $p->normal_profile ?? '' }}" @selected((string)old('package_id', $customer->package_id) === (string)$p->id)>{{ $p->name }} — Rp {{ number_format($p->price, 0, ',', '.') }}</option>@endforeach</select></div>
-            <div class="col-md-4"><label class="form-label" for="router_id">Router MikroTik</label><select id="router_id" name="router_id" class="form-select"><option value="">Pilih router (opsional)</option>@foreach($routers as $router)<option value="{{ $router->id }}" @selected((string)old('router_id', $customer->router_id) === (string)$router->id)>{{ $router->name }} — {{ $router->host }}:{{ $router->port }}</option>@endforeach</select></div>
+            <div class="col-md-4"><label class="form-label" for="router_id">Router MikroTik</label><select id="router_id" name="router_id" class="form-select"><option value="">Pilih router</option>@foreach($routers as $router)<option value="{{ $router->id }}" @selected((string)old('router_id', $customer->router_id) === (string)$router->id)>{{ $router->name }} — {{ $router->host }}:{{ $router->port }}</option>@endforeach</select></div>
+            <div class="col-md-4"><label class="form-label" for="package_id">Paket billing / profil PPP <span class="text-danger">*</span></label><select id="package_id" name="package_id" class="form-select" required><option value="">Pilih router lebih dulu</option>@foreach($packages as $p)<option value="{{ $p->id }}" data-router-id="{{ $p->router_id }}" data-profile="{{ $p->normal_profile }}" data-fup-enabled="{{ $p->fup_enabled ? '1' : '0' }}" data-fup-limit="{{ $p->fup_limit_bytes ?? '' }}" data-fup-speed="{{ $p->fup_speed_after ?? '' }}" @selected((string)old('package_id', $customer->package_id) === (string)$p->id)>{{ $p->name }} — Rp {{ number_format($p->price, 0, ',', '.') }} | {{ $p->router?->name ?? 'Router belum ditautkan' }} / {{ $p->normal_profile }}</option>@endforeach</select><div class="form-text">Paket menentukan tagihan dan profil PPP yang sama-sama dipakai pelanggan.</div><div class="form-text text-warning" id="package-mapping-note" role="status"></div></div>
             <div class="col-md-4 pppoe-field"><label class="form-label" for="pppoe_username">Username PPP <span class="text-danger">*</span></label><input id="pppoe_username" name="pppoe_username" class="form-control" value="{{ old('pppoe_username', $customer->pppoe_username) }}" maxlength="120"></div>
             <div class="col-md-4 pppoe-field"><label class="form-label" for="pppoe_password">Password PPP <span class="text-danger">{{ $creating ? '*' : '' }}</span></label><input id="pppoe_password" name="pppoe_password" type="password" class="form-control" autocomplete="new-password" placeholder="{{ $creating ? '' : 'Kosongkan jika tidak diubah' }}"></div>
             <div class="col-md-4 hotspot-field"><label class="form-label" for="hotspot_username">Username Hotspot <span class="text-danger">*</span></label><input id="hotspot_username" name="hotspot_username" class="form-control" value="{{ old('hotspot_username', $customer->hotspot_username) }}" maxlength="120"></div>
             <div class="col-md-4 hotspot-field"><label class="form-label" for="hotspot_password">Password Hotspot <span class="text-danger">{{ $creating ? '*' : '' }}</span></label><input id="hotspot_password" name="hotspot_password" type="password" class="form-control" autocomplete="new-password" placeholder="{{ $creating ? '' : 'Kosongkan jika tidak diubah' }}"></div>
             <div class="col-md-4"><label class="form-label" for="pppoe_ip">IP statis PPP</label><input id="pppoe_ip" name="pppoe_ip" class="form-control" value="{{ old('pppoe_ip', $customer->pppoe_ip) }}" placeholder="Opsional"></div>
             <div class="col-md-4"><label class="form-label" for="pppoe_mac">MAC address terkunci</label><input id="pppoe_mac" name="pppoe_mac" class="form-control" value="{{ old('pppoe_mac', $customer->pppoe_mac) }}" placeholder="AA:BB:CC:DD:EE:FF"></div>
-            <div class="col-md-4"><label class="form-label" for="pppoe_profile_normal">Profil normal PPP</label><input id="pppoe_profile_normal" name="pppoe_profile_normal" class="form-control" value="{{ old('pppoe_profile_normal', $customer->pppoe_profile_normal) }}"></div>
+            <div class="col-md-4"><label class="form-label" for="pppoe_profile_display">Profil PPP dari paket</label><input id="pppoe_profile_display" class="form-control" value="{{ old('pppoe_profile_normal', $customer->package?->normal_profile ?: $customer->pppoe_profile_normal) }}" readonly><input type="hidden" id="pppoe_profile_normal" name="pppoe_profile_normal" value="{{ old('pppoe_profile_normal', $customer->package?->normal_profile ?: $customer->pppoe_profile_normal) }}"><div class="form-text">Profil ini mengikuti paket; ubah pemetaannya di menu Paket &amp; Profil PPP.</div></div>
             <div class="col-md-4"><label class="form-label" for="pppoe_profile_isolir">Profil isolir PPP</label><input id="pppoe_profile_isolir" name="pppoe_profile_isolir" class="form-control" value="{{ old('pppoe_profile_isolir', $customer->pppoe_profile_isolir ?: 'ISOLIR') }}"></div>
             <div class="col-md-4"><label class="form-label" for="portal_password">Password portal pelanggan</label><input id="portal_password" name="portal_password" type="text" class="form-control" minlength="8" autocomplete="new-password" value="{{ old('portal_password', $creating ? ($portalPassword ?? '') : '') }}" placeholder="{{ $creating ? '' : 'Kosongkan jika tidak diubah' }}"><div class="form-text">{{ $creating ? 'Dibuat acak otomatis dan ditampilkan agar mudah disalin.' : 'Password lama tidak dapat ditampilkan. Isi hanya jika ingin menggantinya.' }}</div></div>
         </div>
@@ -84,7 +84,7 @@
         <div class="row g-3">
             <div class="col-md-4"><label class="form-label" for="fup_mode">Kebijakan FUP</label><select id="fup_mode" name="fup_mode" class="form-select" required><option value="inherit" @selected($fupMode === 'inherit')>Ikuti pengaturan paket</option><option value="on" @selected($fupMode === 'on')>Aktif untuk pelanggan ini</option><option value="off" @selected($fupMode === 'off')>Nonaktif untuk pelanggan ini</option></select><div class="form-text" id="package-fup-note"></div></div>
             <div class="col-md-4"><label class="form-label" for="fup_limit_gb">Batas pemakaian FUP (GB)</label><input id="fup_limit_gb" name="fup_limit_gb" type="number" min="0" step="0.1" class="form-control" value="{{ $fupLimitGb }}" placeholder="Kosongkan untuk mengikuti paket"></div>
-            <div class="col-md-4"><label class="form-label" for="fup_speed_after">Profil setelah FUP</label><input id="fup_speed_after" name="fup_speed_after" class="form-control" value="{{ old('fup_speed_after', $customer->fup_speed_after) }}" placeholder="Nama PPP profile di MikroTik"></div>
+            <div class="col-md-4"><label class="form-label" for="fup_speed_after">Profil setelah FUP (dari paket)</label><input id="fup_speed_after" name="fup_speed_after" class="form-control" value="{{ old('fup_speed_after', $customer->package?->fup_speed_after ?: $customer->fup_speed_after) }}" readonly><div class="form-text">Profil FUP mengikuti paket supaya konsisten dengan profil router.</div></div>
             <div class="col-md-4"><label class="form-label" for="status">Status layanan</label><select id="status" name="status" class="form-select">@foreach(['active'=>'Aktif','isolated'=>'Terisolir','suspended'=>'Ditangguhkan','terminated'=>'Berhenti','trial'=>'Uji coba'] as $value=>$label)<option value="{{ $value }}" @selected(old('status', $customer->status ?: 'active') === $value)>{{ $label }}</option>@endforeach</select></div>
             <div class="col-md-4 d-flex align-items-end"><div class="form-check mb-2"><input type="hidden" name="is_auto_isolate" value="0"><input type="checkbox" name="is_auto_isolate" value="1" class="form-check-input" id="is_auto_isolate" @checked(old('is_auto_isolate', $customer->is_auto_isolate ?? true))><label for="is_auto_isolate" class="form-check-label">Izinkan isolir otomatis</label></div></div>
             <div class="col-md-4"><label class="form-label" for="activated_at">Tanggal aktif layanan</label><input id="activated_at" name="activated_at" type="date" class="form-control" value="{{ old('activated_at', $customer->activated_at?->format('Y-m-d') ?? ($creating ? now()->format('Y-m-d') : '')) }}"></div>
@@ -204,16 +204,38 @@
 
     const packageSelect = document.getElementById('package_id');
     const fupNote = document.getElementById('package-fup-note');
+    const packageMappingNote = document.getElementById('package-mapping-note');
+    const filterPackagesByRouter = () => {
+        const routerId = routerSelect.value;
+        [...packageSelect.options].forEach((option) => {
+            if (!option.value) return;
+            option.hidden = Boolean(routerId && option.dataset.routerId && option.dataset.routerId !== routerId);
+        });
+        const selected = packageSelect.options[packageSelect.selectedIndex];
+        if (selected?.hidden) packageSelect.value = '';
+        if (!packageSelect.value) {
+            const available = [...packageSelect.options].some((option) => option.value && !option.hidden);
+            packageSelect.options[0].textContent = routerId ? (available ? 'Pilih paket untuk router ini' : 'Belum ada paket untuk router ini') : 'Pilih router lebih dulu';
+        }
+        renderFupNote();
+    };
     const renderFupNote = () => {
         const selected = packageSelect.options[packageSelect.selectedIndex];
-        if (!selected || !selected.value) { fupNote.textContent = 'Pilih paket untuk melihat kebijakan FUP paket.'; return; }
+        const profileDisplay = document.getElementById('pppoe_profile_display');
+        const profileInput = document.getElementById('pppoe_profile_normal');
+        const fupProfile = document.getElementById('fup_speed_after');
+        if (!selected || !selected.value) { fupNote.textContent = 'Pilih router dan paket untuk melihat pemetaan PPP dan kebijakan FUP.'; profileDisplay.value = ''; profileInput.value = ''; fupProfile.value = ''; packageMappingNote.textContent = ''; return; }
+        packageMappingNote.textContent = selected.dataset.routerId ? '' : 'Paket lama ini belum ditautkan ke router. Admin perlu mengaturnya di menu PPPoE → Paket & Profil PPP sebelum data disimpan.';
         const enabled = selected.dataset.fupEnabled === '1';
         const limit = Number(selected.dataset.fupLimit || 0);
         fupNote.textContent = enabled ? `Paket ini mengaktifkan FUP${limit ? ` dengan batas ${(limit / 1073741824).toFixed(2)} GB` : ''}${selected.dataset.fupSpeed ? `; profil setelah batas: ${selected.dataset.fupSpeed}` : ''}.` : 'Paket ini tidak mengaktifkan FUP.';
-        const normal = document.getElementById('pppoe_profile_normal');
-        if (!normal.value && selected.dataset.normalProfile) normal.value = selected.dataset.normalProfile;
+        profileDisplay.value = selected.dataset.profile || '';
+        profileInput.value = selected.dataset.profile || '';
+        fupProfile.value = selected.dataset.fupSpeed || '';
     };
+    routerSelect.addEventListener('change', filterPackagesByRouter);
     packageSelect.addEventListener('change', renderFupNote);
+    filterPackagesByRouter();
     renderFupNote();
 
     document.getElementById('onu_record_id').addEventListener('change', (event) => {
@@ -227,4 +249,3 @@
 })();
 </script>
 @endsection
-
