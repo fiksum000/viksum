@@ -31,7 +31,8 @@ class InvoiceController
             $payment = $tripay->createInvoiceCheckout($invoice, $method);
             return redirect()->away($payment->checkout_url);
         } catch (\Throwable $exception) {
-            return back()->with('error', $exception->getMessage());
+            report($exception);
+            return back()->with('error', 'Pembayaran belum dapat dibuat. Silakan coba lagi atau hubungi administrator.');
         }
     }
 
