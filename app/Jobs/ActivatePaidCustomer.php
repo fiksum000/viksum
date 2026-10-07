@@ -31,8 +31,15 @@ class ActivatePaidCustomer implements ShouldQueue
 
         $isolation->unisolate($invoice->customer);
         if ($invoice->customer->whatsapp_number ?: $invoice->customer->phone) {
-            $notifications->queue($invoice, 'payment_success', $invoice->customer->whatsapp_number ?: $invoice->customer->phone, "Pembayaran {$invoice->invoice_number} diterima. Terima kasih.", [
-                'name' => $invoice->customer->name,
+            $customer = $invoice->customer;
+            $serviceUsername = $customer->service_type === 'pppoe' ? $customer->pppoe_username : $customer->hotspot_username;
+            $notifications->queue($invoice, 'payment_success', $customer->whatsapp_number ?: $customer->phone, "Yth. {$customer->name}, pembayaran {$invoice->invoice_number} sebesar Rp ".number_format($invoice->total, 0, ',', '.')." telah kami terima. Terima kasih telah melakukan pembayaran. ID pelanggan: {$customer->customer_code}. Username layanan: {$serviceUsername}. Portal pelanggan: ".route('portal.login')." (ID login: {$customer->customer_code}).", [
+                'name' => $customer->name,
+                'customer_code' => $customer->customer_code,
+                'portal_username' => $customer->customer_code,
+                'service_username' => $serviceUsername,
+                'pppoe_username' => $customer->pppoe_username,
+                'portal_url' => route('portal.login'),
                 'invoice_number' => $invoice->invoice_number,
                 'amount' => number_format($invoice->total, 0, ',', '.'),
             ], oncePerInvoice: true);
