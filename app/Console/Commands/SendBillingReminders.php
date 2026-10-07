@@ -31,6 +31,8 @@ class SendBillingReminders extends Command
                     $customer = $invoice->customer;
                     $target = $customer?->whatsapp_number ?: $customer?->phone;
                     if (! $customer || ! $target) {
+                        $notifications->recordFailure($invoice, 'billing_reminder', $today, 'Nomor WhatsApp pelanggan belum diisi.');
+                        $failed++;
                         continue;
                     }
 

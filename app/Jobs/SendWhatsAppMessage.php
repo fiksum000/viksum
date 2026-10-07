@@ -31,9 +31,9 @@ class SendWhatsAppMessage implements ShouldQueue
 
     public function handle(FonnteService $fonnte): void
     {
-        $fonnte->send($this->customerId, $this->target, $this->message, $this->event, $this->variables);
+        $fonnte->send($this->customerId, $this->target, $this->message, $this->event, $this->variables, $this->billingNotificationId);
         if ($this->billingNotificationId) {
-            BillingNotification::query()->whereKey($this->billingNotificationId)->update([
+            BillingNotification::query()->whereKey($this->billingNotificationId)->where('status', '!=', 'failed')->update([
                 'status' => 'sent', 'sent_at' => now(), 'last_error' => null,
             ]);
         }

@@ -12,6 +12,19 @@ use Throwable;
 
 class BillingNotificationService
 {
+    public function recordFailure(Invoice $invoice, string $event, CarbonInterface|string|null $scheduledFor, string $reason): void
+    {
+        $date = $scheduledFor instanceof CarbonInterface ? $scheduledFor->toDateString() : ($scheduledFor ?: now(config('billing.timezone'))->toDateString());
+        $notification = BillingNotification::query()->firstOrCreate(
+            ['invoice_id' => $invoice->id, 'event' => $event, 'scheduled_for' => $date],
+            ['customer_id' => $invoice->customer_id, 'status' => 'failed', 'last_error' => mb_substr($reason, 0, 1000)],
+        );
+
+        if (! $notification->wasRecentlyCreated && $notification->status !== 'sent') {
+            $notification->update(['status' => 'failed', 'last_error' => mb_substr($reason, 0, 1000)]);
+        }
+    }
+
     /**
      * Queue one WhatsApp notice per invoice/event/date. This makes scheduled retries
      * safe and gives payment confirmations a permanent per-invoice idempotency key.

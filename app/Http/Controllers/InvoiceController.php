@@ -91,6 +91,7 @@ class InvoiceController
         $invoice->loadMissing('customer');
         $target = $invoice->customer?->whatsapp_number ?: $invoice->customer?->phone;
         if (! $target) {
+            $notifications->recordFailure($invoice, 'billing_reminder', now(config('billing.timezone')), 'Nomor WhatsApp pelanggan belum diisi.');
             return back()->with('error', 'Nomor WhatsApp pelanggan belum diisi.');
         }
 
@@ -131,3 +132,4 @@ class InvoiceController
         return back()->with('success', 'Pengingat tagihan masuk antrean WhatsApp.');
     }
 }
+
