@@ -59,7 +59,7 @@ class PublicRegistrationController extends Controller
 
         $package = Package::findOrFail($data['package_id']);
         $customerCode = $this->newCustomerCode();
-        $portalPassword = Str::random(16);
+        $portalPassword = \App\Support\CustomerIdentity::newPortalPassword();
 
         $customer = Customer::create([
             'customer_code' => $customerCode,
@@ -107,7 +107,7 @@ class PublicRegistrationController extends Controller
     private function newCustomerCode(): string
     {
         do {
-            $code = 'CUST-'.Str::upper(Str::random(12));
+            $code = \App\Support\CustomerIdentity::newCustomerCode();
         } while (Customer::where('customer_code', $code)->exists());
 
         return $code;
