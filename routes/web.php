@@ -1,6 +1,4 @@
-<?php
-
-use App\Http\Controllers\{AuthController, BroadcastController, CustomerController, CustomerImportExportController, CustomerPortalController, DashboardController, DashboardTrafficController, HotspotController, InvoiceArchiveController, InvoiceController, InvoiceNotificationController, InvoicePdfController, PackageController, PaymentController, PublicPaymentController, PublicRegistrationController, ReportsController, RouterController, RouterReadController, UserController, WaTemplateController};
+<?phpuse App\Http\Controllers\{AuthController, BroadcastController, CustomerController, CustomerImportExportController, CustomerPortalController, CustomerTrafficController, DashboardController, DashboardTrafficController, HotspotController, InvoiceArchiveController, InvoiceController, InvoiceNotificationController, InvoicePdfController, PackageController, PaymentController, PublicPaymentController, PublicRegistrationController, ReportsController, RouterController, RouterReadController, UserController, WaTemplateController};
 use App\Http\Controllers\{OltController, OnuController, PaymentSettingsController};
 use Illuminate\Support\Facades\Route;
 
@@ -30,6 +28,7 @@ Route::middleware('auth.session')->group(function (): void {
 
     Route::middleware('role:super_admin,admin,operator,technician')->group(function (): void {
         Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
+        Route::get('/customers/traffic', CustomerTrafficController::class)->middleware('throttle:30,1')->name('customers.traffic');
     });
 
     Route::get('/customers/export', [CustomerImportExportController::class, 'export'])->middleware('role:super_admin,admin,finance')->name('customers.export');
