@@ -37,11 +37,19 @@ class SendBillingReminders extends Command
                     $amount = number_format((int) $invoice->total, 0, ',', '.');
                     $dueDate = CarbonImmutable::parse($invoice->due_date, config('billing.timezone'));
                     $paymentUrl = $invoice->payment_url ?: url('/pay/'.$invoice->public_token);
-                    $message = "Halo {$customer->name}, tagihan {$invoice->invoice_number} sebesar Rp {$amount} jatuh tempo pada {$dueDate->format('d-m-Y')}. Pembayaran: {$paymentUrl}";
+                    $serviceUsername = $customer->service_type === 'pppoe'
+                        ? $customer->pppoe_username
+                        : $customer->hotspot_username;
+                    $message = "Yth. {$customer->name}, kami mengingatkan tagihan {$invoice->invoice_number} sebesar Rp {$amount} yang jatuh tempo pada {$dueDate->format('d-m-Y')}. ID pelanggan: {$customer->customer_code}. Username layanan: {$serviceUsername}. Silakan lakukan pembayaran melalui {$paymentUrl}. Portal pelanggan: ".route('portal.login')." (ID login: {$customer->customer_code}). Terima kasih.";
 
                     try {
                         if ($notifications->queue($invoice, 'billing_reminder', $target, $message, [
                             'name' => $customer->name,
+                            'customer_code' => $customer->customer_code,
+                            'portal_username' => $customer->customer_code,
+                            'service_username' => $serviceUsername,
+                            'pppoe_username' => $customer->pppoe_username,
+                            'portal_url' => route('portal.login'),
                             'invoice_number' => $invoice->invoice_number,
                             'amount' => $amount,
                             'due_date' => $dueDate->format('d-m-Y'),
