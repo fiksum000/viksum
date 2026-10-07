@@ -29,7 +29,7 @@ class RouterController extends Controller { public function index()
 /ip firewall nat remove [find where comment="FIKSUM-ISOLIR-HTTP"]
 
 # Urutan penting: izinkan host billing, lalu alihkan HTTP lainnya
-/ip proxy access add action=redirect action-data="__ISOLATION_URL__" local-port=8097 comment="FIKSUM-ISOLIR-Redirect" place-before=0
+/ip proxy access add action=deny redirect-to="__ISOLATION_URL__" local-port=8097 comment="FIKSUM-ISOLIR-Redirect" place-before=0
 /ip proxy access add action=allow dst-host="__BILLING_HOST__" comment="FIKSUM-ISOLIR-Allow-Portal" place-before=0
 
 # Hanya HTTP port 80 dari IP pelanggan yang memakai profile ISOLIR
