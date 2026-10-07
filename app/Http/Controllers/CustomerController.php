@@ -16,7 +16,7 @@ use RuntimeException;
 
 class CustomerController extends Controller
 {
-    public function index(Request $r, CustomerQueryService $customerQuery)
+    public function index(Request $r, CustomerQueryService $customerQuery, RouterOsService $routerOs)
     {
         $filters = $r->validate([
             'search' => ['nullable', 'string', 'max:120'],
@@ -25,10 +25,56 @@ class CustomerController extends Controller
             'package_id' => ['nullable', 'integer', 'exists:packages,id'],
         ]);
         $q = $customerQuery->filtered($filters)->paginate(25)->withQueryString();
+        $period = now(config('billing.timezone'))->format('Y-m');
+        $customers = $q->getCollection();
+        $customers->load(['invoices' => fn ($query) => $query->where('period', $period)]);
+
+        // Billing state and live router session status are distinct.
+        $sessionMaps = [];
+        foreach ($customers->filter(fn (Customer $customer) => $customer->router_id)->groupBy('router_id') as $routerId => $routerCustomers) {
+            $router = $routerCustomers->first()->router;
+            if (!$router || !$router->enabled) {
+                $sessionMaps[$routerId] = null;
+                continue;
+            }
+
+            try {
+                $pppSessions = array_filter(
+                    $routerOs->activePppMap($router),
+                    fn (array $session) => ($session['service'] ?? 'pppoe') === 'pppoe',
+                );
+                $hotspotSessions = array_map(
+                    fn (array $session) => (string) ($session['user'] ?? ''),
+                    $routerOs->listHotspotActive($router),
+                );
+                $sessionMaps[$routerId] = [
+                    'pppoe' => array_fill_keys(array_keys($pppSessions), true),
+                    'hotspot' => array_fill_keys($hotspotSessions, true),
+                ];
+            } catch (\Throwable $exception) {
+                Log::warning('Customer live connection status read failed', [
+                    'router_id' => $router->id,
+                    'error' => $exception->getMessage(),
+                ]);
+                $sessionMaps[$routerId] = null;
+            }
+        }
+
+        foreach ($customers as $customer) {
+            $username = $customer->service_type === 'pppoe' ? $customer->pppoe_username : $customer->hotspot_username;
+            $connectionStatus = 'not_configured';
+            if (filled($username) && $customer->router_id) {
+                $sessions = $sessionMaps[$customer->router_id] ?? null;
+                $connectionStatus = $sessions === null
+                    ? 'unknown'
+                    : (isset($sessions[$customer->service_type][$username]) ? 'online' : 'offline');
+            }
+            $customer->setAttribute('live_connection_status', $connectionStatus);
+        }
 
         return view('customers.index', [
             'customers' => $q,
-            'packages' => Package::orderBy('name')->get(['id', 'name']),
+            'packages' => Package::orderBy('name')->get(['id', 'name']), 'billingPeriod' => $period,
         ]);
     }
 
