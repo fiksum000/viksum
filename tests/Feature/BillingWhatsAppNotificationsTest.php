@@ -21,13 +21,22 @@ class BillingWhatsAppNotificationsTest extends TestCase
     {
         Queue::fake();
         $this->travelTo(now(config('billing.timezone'))->startOfDay());
-        $first = $this->invoiceFor($this->customer('628111111111', 5), now(config('billing.timezone'))->addDay());
+        $firstCustomer = $this->customer('628111111111', 5);
+        $firstCustomer->update(['pppoe_username' => 'ppp-first']);
+        $first = $this->invoiceFor($firstCustomer, now(config('billing.timezone'))->addDay());
         $second = $this->invoiceFor($this->customer('628222222222', 5), now(config('billing.timezone'))->addDay());
 
         $this->artisan('billing:reminders', ['offset' => 1])->assertSuccessful();
         $this->artisan('billing:reminders', ['offset' => 1])->assertSuccessful();
 
         Queue::assertPushedTimes(SendWhatsAppMessage::class, 2);
+        Queue::assertPushed(SendWhatsAppMessage::class, fn ($job) =>
+            $job->customerId === $firstCustomer->id
+            && $job->variables['customer_code'] === $firstCustomer->customer_code
+            && $job->variables['portal_username'] === $firstCustomer->customer_code
+            && $job->variables['pppoe_username'] === 'ppp-first'
+            && $job->variables['portal_url'] === route('portal.login')
+        );
         $this->assertDatabaseCount('billing_notifications', 2);
         $this->assertDatabaseHas('billing_notifications', ['invoice_id' => $first->id, 'event' => 'billing_reminder']);
         $this->assertDatabaseHas('billing_notifications', ['invoice_id' => $second->id, 'event' => 'billing_reminder']);
