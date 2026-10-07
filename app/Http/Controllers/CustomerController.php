@@ -98,7 +98,7 @@ class CustomerController extends Controller
                 'error' => $e->getMessage(),
             ]);
             $feedbackKey = 'warning';
-            $message = 'Data pelanggan tersimpan, tetapi secret PPP gagal disinkronkan ke MikroTik: '.$e->getMessage();
+            $message = 'Data pelanggan tersimpan, tetapi sinkronisasi secret PPP gagal. Periksa koneksi router dan log aplikasi.';
         }
 
         return redirect()->route('customers.edit', $customer)
@@ -161,7 +161,7 @@ class CustomerController extends Controller
                 'error' => $e->getMessage(),
             ]);
             $feedbackKey = 'warning';
-            $message = 'Data pelanggan tersimpan, tetapi secret PPP gagal disinkronkan ke MikroTik: '.$e->getMessage();
+            $message = 'Data pelanggan tersimpan, tetapi sinkronisasi secret PPP gagal. Periksa koneksi router dan log aplikasi.';
         }
 
         return redirect()->route('customers.edit', $customer)->with($feedbackKey, $message);
@@ -291,4 +291,3 @@ class CustomerController extends Controller
         return $data;
     }
 }
-
