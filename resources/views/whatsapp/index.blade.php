@@ -1,6 +1,7 @@
 @extends('layouts.app')
 @section('content')
 <h1>WhatsApp Fonnte</h1>
+<div class="mb-3"><a href="{{ route('invoices.notifications') }}" class="btn btn-outline-info">Lihat status & daftar pesan invoice</a></div>
 <section class="card card-body mb-4">
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
         <div>
@@ -25,7 +26,7 @@
         <div class="col-md-6"><label for="fonnte_api_token" class="form-label">API Key / Token <span class="text-danger">*</span></label><input id="fonnte_api_token" name="fonnte_api_token" type="password" class="form-control" autocomplete="new-password" placeholder="{{ $settings?->fonnte_api_token ? 'Token tersimpan; isi hanya untuk mengganti' : 'Masukkan token device Fonnte' }}"><div class="form-text">Token dienkripsi saat disimpan. Kosongkan untuk tetap memakai token tersimpan; isi token baru hanya jika ingin menggantinya. <a href="https://md.fonnte.com/new/device.php" target="_blank" rel="noopener">Buka halaman device untuk mengambil Token/API Key</a>.</div></div>
         <div class="col-12"><div class="form-check form-switch"><input type="hidden" name="fonnte_enabled" value="0"><input class="form-check-input" type="checkbox" role="switch" id="fonnte_enabled" name="fonnte_enabled" value="1" @checked(old('fonnte_enabled', $settings?->fonnte_enabled ?? false))><label class="form-check-label" for="fonnte_enabled">Aktifkan pengiriman WhatsApp</label></div></div>
         @if($webhookUrl)
-            <div class="col-12"><label for="fonnte_webhook_url" class="form-label">Webhook aplikasi (masuk ke Fonnte → Device → Edit)</label><div class="input-group"><input id="fonnte_webhook_url" class="form-control" value="{{ $webhookUrl }}" readonly><button type="button" class="btn btn-outline-light" onclick="navigator.clipboard.writeText(document.getElementById('fonnte_webhook_url').value).then(()=>this.textContent='Tersalin')">Salin URL</button></div><div class="form-text">Aktifkan Auto Read di pengaturan perangkat Fonnte agar webhook menerima pesan masuk. URL ini mengandung token rahasia; jangan dibagikan ke publik.</div></div>
+            <div class="col-12"><label for="fonnte_webhook_url" class="form-label">Webhook aplikasi (masuk ke Fonnte → Device → Edit)</label><div class="input-group"><input id="fonnte_webhook_url" class="form-control" value="{{ $webhookUrl }}" readonly><button type="button" class="btn btn-outline-light" onclick="navigator.clipboard.writeText(document.getElementById('fonnte_webhook_url').value).then(()=>this.textContent='Tersalin')">Salin URL</button></div><div class="form-text">Pasang URL ini sebagai webhook pesan masuk dan status pesan Fonnte. Status kiriman lanjut seperti Invalid, Failed, Sent, dan Expired akan memperbarui daftar invoice. Aktifkan Auto Read untuk pesan masuk. URL mengandung token rahasia; jangan dibagikan. <a href="https://docs.fonnte.com/webhook-update-message-status/" target="_blank" rel="noopener">Panduan status pesan Fonnte</a>.</div></div>
         @else
             <div class="col-12"><div class="alert alert-secondary mb-0">Simpan koneksi untuk membuat URL webhook rahasia.</div></div>
         @endif

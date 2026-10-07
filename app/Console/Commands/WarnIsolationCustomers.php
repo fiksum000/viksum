@@ -42,6 +42,8 @@ class WarnIsolationCustomers extends Command
 
                     $target = $customer->whatsapp_number ?: $customer->phone;
                     if (! $target) {
+                        $notifications->recordFailure($invoice, 'isolation_warning', $today, 'Nomor WhatsApp pelanggan belum diisi.');
+                        $failed++;
                         continue;
                     }
 

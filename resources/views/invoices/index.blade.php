@@ -3,6 +3,7 @@
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
     <h1 class="mb-0">Invoice & Arsip</h1>
+    <a href="{{ route('invoices.notifications') }}" class="btn btn-outline-info">Status Pengiriman WA</a>
     @if(in_array($billingUser?->role, ['super_admin', 'admin'], true))
         <form method="POST" action="{{ route('invoices.generate') }}" class="d-flex gap-2">
             @csrf
@@ -88,3 +89,4 @@
 </div>
 <div class="mt-3">{{ $invoices->links() }}</div>
 @endsection
+

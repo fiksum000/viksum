@@ -74,12 +74,22 @@ class FonnteService
         SendWhatsAppMessage::dispatch($customerId, $target, $fallbackMessage, $event, $variables);
     }
 
-    public function send(?int $customerId, string $target, string $message, string $event = 'manual', array $variables = []): array
+    public function send(?int $customerId, string $target, string $message, string $event = 'manual', array $variables = [], ?int $billingNotificationId = null): array
     {
         $settings = IntegrationSetting::query()->find(1);
         $token = $settings?->fonnte_api_token ?: config('services.fonnte.token');
         if (! $this->isConfigured() || ! $token) {
-            throw new RuntimeException('FONNTE_TOKEN belum diisi.');
+            $reason = 'Gateway WhatsApp nonaktif atau API Token belum tersedia.';
+            WaLog::create([
+                'customer_id' => $customerId,
+                'billing_notification_id' => $billingNotificationId,
+                'target' => $target,
+                'event' => $event,
+                'message' => $message,
+                'status' => 'failed',
+                'response' => ['detail' => $reason],
+            ]);
+            throw new RuntimeException($reason);
         }
 
         $template = WaTemplate::where('event', $event)->where('enabled', true)->first();
@@ -92,26 +102,64 @@ class FonnteService
         }
 
         $payload = ['target' => $target, 'message' => $message, 'delay' => (string) config('services.fonnte.delay')];
-        $response = Http::timeout(20)
-            ->withHeaders(['Authorization' => $token])
-            ->asForm()
-            ->post(config('services.fonnte.url'), $payload);
+        try {
+            $response = Http::timeout(20)
+                ->withHeaders(['Authorization' => $token])
+                ->asForm()
+                ->post(config('services.fonnte.url'), $payload);
+        } catch (\Throwable $exception) {
+            $reason = $exception instanceof ConnectionException
+                ? 'Gagal terhubung ke Fonnte (timeout atau jaringan).'
+                : 'Pengiriman gagal karena gangguan koneksi ke Fonnte.';
+            WaLog::create([
+                'customer_id' => $customerId,
+                'billing_notification_id' => $billingNotificationId,
+                'target' => $target,
+                'event' => $event,
+                'message' => $message,
+                'status' => 'failed',
+                'response' => ['detail' => $reason],
+            ]);
+            throw new RuntimeException($reason, 0, $exception);
+        }
 
-        $apiStatus = $response->json('status');
+        $body = $response->json() ?? [];
+        $apiStatus = $body['status'] ?? null;
         $ok = $response->successful() && ($apiStatus === null || filter_var($apiStatus, FILTER_VALIDATE_BOOLEAN));
+        $detail = $this->responseDetail($body, $ok);
+        $messageId = $body['id'][0] ?? $body['id'] ?? null;
         WaLog::create([
             'customer_id' => $customerId,
+            'billing_notification_id' => $billingNotificationId,
             'target' => $target,
             'event' => $event,
             'message' => $message,
             'status' => $ok ? 'sent' : 'failed',
-            'response' => $response->json() ?? ['body' => Str::limit($response->body(), 1000)],
+            'provider_message_id' => is_scalar($messageId) ? Str::limit((string) $messageId, 120, '') : null,
+            'provider_status' => is_scalar($body['process'] ?? null) ? Str::limit((string) $body['process'], 60, '') : null,
+            'response' => array_filter([
+                'detail' => $detail,
+                'requestid' => is_scalar($body['requestid'] ?? null) ? Str::limit((string) $body['requestid'], 120, '') : null,
+                'status' => $apiStatus,
+            ], static fn ($value) => $value !== null),
         ]);
 
         if (!$ok) {
-            throw new RuntimeException('Fonnte mengembalikan respons gagal.');
+            throw new RuntimeException($detail);
         }
 
-        return $response->json() ?? [];
+        return $body;
+    }
+
+    private function responseDetail(array $body, bool $success): string
+    {
+        foreach (['detail', 'reason', 'message'] as $key) {
+            if (is_string($body[$key] ?? null) && trim($body[$key]) !== '') {
+                return Str::limit(trim(preg_replace('/[\x00-\x1F\x7F]/u', ' ', $body[$key]) ?? ''), 500);
+            }
+        }
+
+        return $success ? 'Permintaan diterima Fonnte.' : 'Fonnte menolak pengiriman pesan.';
     }
 }
+

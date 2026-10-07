@@ -43,6 +43,8 @@ class ActivatePaidCustomer implements ShouldQueue
                 'invoice_number' => $invoice->invoice_number,
                 'amount' => number_format($invoice->total, 0, ',', '.'),
             ], oncePerInvoice: true);
+        } else {
+            $notifications->recordFailure($invoice, 'payment_success', '1970-01-01', 'Nomor WhatsApp pelanggan belum diisi.');
         }
         Audit::log('payment.customer_activated', Invoice::class, $invoice->id);
     }
