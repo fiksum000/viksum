@@ -1,4 +1,5 @@
-<?phpuse App\Http\Controllers\{AuthController, BroadcastController, CustomerController, CustomerImportExportController, CustomerPortalController, CustomerTrafficController, DashboardController, DashboardTrafficController, HotspotController, InvoiceArchiveController, InvoiceController, InvoiceNotificationController, InvoicePdfController, PackageController, PaymentController, PublicPaymentController, PublicRegistrationController, ReportsController, RouterController, RouterReadController, UserController, WaTemplateController};
+<?php
+use App\Http\Controllers\{AuthController, BroadcastController, CustomerController, CustomerImportExportController, CustomerPortalController, CustomerTrafficController, DashboardController, DashboardTrafficController, HotspotController, InvoiceArchiveController, InvoiceController, InvoiceNotificationController, InvoicePdfController, PackageController, PaymentController, PublicPaymentController, PublicRegistrationController, ReportsController, RouterController, RouterReadController, UserController, WaTemplateController};
 use App\Http\Controllers\{OltController, OnuController, PaymentSettingsController};
 use Illuminate\Support\Facades\Route;
 
