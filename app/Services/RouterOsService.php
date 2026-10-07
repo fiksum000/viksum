@@ -97,4 +97,3 @@ class RouterOsService {
     return $out;
   }
 }
-}
