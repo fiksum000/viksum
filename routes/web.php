@@ -49,6 +49,8 @@ Route::middleware('auth.session')->group(function (): void {
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
         Route::get('/whatsapp', [WaTemplateController::class, 'index'])->name('whatsapp.index');
         Route::put('/whatsapp/connection', [WaTemplateController::class, 'updateConnection'])->name('whatsapp.connection.update');
+        Route::post('/whatsapp/connection/check', [WaTemplateController::class, 'checkConnection'])->middleware('throttle:5,1')->name('whatsapp.connection.check');
+        Route::delete('/whatsapp/connection', [WaTemplateController::class, 'deleteConnection'])->name('whatsapp.connection.delete');
         Route::put('/whatsapp/templates/{template}', [WaTemplateController::class, 'update'])->name('whatsapp.templates.update');
         Route::post('/whatsapp/broadcast', [BroadcastController::class, 'send'])->middleware('throttle:5,1')->name('whatsapp.broadcast');
         Route::get('/payment-settings', [PaymentSettingsController::class, 'index'])->name('payment-settings.index');
