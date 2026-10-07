@@ -21,7 +21,7 @@
         <button class="btn btn-primary">Tampilkan data</button>
         @if($selectedRouter)<a class="btn btn-outline-secondary" href="{{ route('network.read', ['page' => $page]) }}">Bersihkan</a>@endif
     </div>
-    <div class="form-text">Tidak ada koneksi ke router sebelum kamu memilih router dan menekan tombol.</div>
+    <div class="form-text">@if($selectedRouter) Koneksi RouterOS hanya untuk membaca data; konfigurasi router tidak diubah. @else Belum ada koneksi ke router. Pilih router dan tekan tombol untuk mulai membaca. @endif</div>
 </form>
 
 @if($error)
