@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Jobs\SendWhatsAppMessage;
 use App\Models\Customer;
+use App\Models\BillingNotification;
 use App\Models\Invoice;
 use App\Models\Package;
 use App\Models\User;
@@ -43,11 +44,11 @@ class BillingWhatsAppNotificationsTest extends TestCase
         $this->artisan('billing:warn-isolation')->assertSuccessful();
 
         Queue::assertPushedTimes(SendWhatsAppMessage::class, 1);
-        $this->assertDatabaseHas('billing_notifications', [
-            'invoice_id' => $invoice->id,
-            'event' => 'isolation_warning',
-            'scheduled_for' => now(config('billing.timezone'))->toDateString(),
-        ]);
+        $this->assertTrue(BillingNotification::query()
+            ->where('invoice_id', $invoice->id)
+            ->where('event', 'isolation_warning')
+            ->whereDate('scheduled_for', now(config('billing.timezone'))->toDateString())
+            ->exists());
     }
 
     public function test_finance_user_can_queue_one_invoice_reminder_without_sending_to_other_customers(): void
