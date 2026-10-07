@@ -81,10 +81,10 @@ class RouterReadController extends Controller
 
         // Return explicit safe fields only. RouterOS secret/user responses may include passwords.
         $fields = match ($kind) {
-            'ppp-secrets', 'ppp-offline' => ['name', 'service', 'profile', 'disabled', 'remote-address', 'comment'],
+            'ppp-secrets', 'ppp-offline' => ['name', 'service', 'profile', 'disabled', 'remote-address'],
             'ppp-active' => ['name', 'service', 'caller-id', 'address', 'uptime', 'encoding'],
             'ppp-profiles' => ['name', 'local-address', 'remote-address', 'rate-limit', 'only-one', 'session-timeout'],
-            'hotspot-users' => ['name', 'profile', 'server', 'disabled', 'uptime', 'bytes-in', 'bytes-out', 'comment'],
+            'hotspot-users' => ['name', 'profile', 'server', 'disabled', 'uptime', 'bytes-in', 'bytes-out'],
             'hotspot-active' => ['user', 'server', 'address', 'mac-address', 'uptime', 'bytes-in', 'bytes-out'],
             'hotspot-profiles' => ['name', 'rate-limit', 'shared-users', 'session-timeout', 'idle-timeout', 'keepalive-timeout'],
             default => [],
@@ -102,10 +102,10 @@ class RouterReadController extends Controller
     private function columnsFor(string $kind): array
     {
         return match ($kind) {
-            'ppp-secrets', 'ppp-offline' => ['name', 'service', 'profile', 'disabled', 'remote-address', 'comment'],
+            'ppp-secrets', 'ppp-offline' => ['name', 'service', 'profile', 'disabled', 'remote-address'],
             'ppp-active' => ['name', 'service', 'caller-id', 'address', 'uptime', 'encoding'],
             'ppp-profiles' => ['name', 'local-address', 'remote-address', 'rate-limit', 'only-one', 'session-timeout'],
-            'hotspot-users' => ['name', 'profile', 'server', 'disabled', 'uptime', 'bytes-in', 'bytes-out', 'comment'],
+            'hotspot-users' => ['name', 'profile', 'server', 'disabled', 'uptime', 'bytes-in', 'bytes-out'],
             'hotspot-active' => ['user', 'server', 'address', 'mac-address', 'uptime', 'bytes-in', 'bytes-out'],
             'hotspot-profiles' => ['name', 'rate-limit', 'shared-users', 'session-timeout', 'idle-timeout', 'keepalive-timeout'],
             default => [],
