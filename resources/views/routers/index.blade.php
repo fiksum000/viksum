@@ -7,7 +7,7 @@
     <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
         <div>
             <h2 class="h5 mb-1">Script halaman isolir</h2>
-            <p class="text-muted mb-0">Salin script ini dan tempel sekali di Terminal MikroTik. Alamat halaman mengikuti APP_URL billing saat ini: <strong>{{ $billingHost }}/isolir</strong>.</p>
+            <p class="text-muted mb-0">Alamat halaman mengikuti APP_URL billing saat ini: <strong>{{ $billingHost }}/isolir</strong>.</p>
         </div>
         <button class="btn btn-primary" type="button" id="copy-isolation-script">Salin script</button>
     </div>
@@ -15,19 +15,20 @@
     @if($isolationMethod !== 'profile')
         <div class="alert alert-warning mt-3 mb-0">Metode isolir aplikasi saat ini bukan profile PPP. Script ini memakai profile; ubah BILLING_ISOLATION_METHOD ke profile sebelum digunakan.</div>
     @else
-        <div class="alert alert-info mt-3 mb-0">Rule hanya mengarahkan HTTP port 80 dari address-list pelanggan pada profile isolir. HTTPS tidak dialihkan. Pastikan koneksi publik ke billing host sudah aktif di Cloudflare Tunnel.</div>
+        <div class="alert alert-warning mt-3 mb-0">Script ini mengubah profile PPP, Web Proxy, NAT, dan filter input MikroTik. Tinjau port proxy 8097, backup, dan uji saat maintenance sebelum menjalankan. Rule lama vendor lain tidak diubah otomatis. Hanya HTTP port 80 yang dialihkan; HTTPS tidak dapat dialihkan transparan oleh Web Proxy RouterOS. Pastikan billing host publik aktif.</div>
     @endif
 
     <label for="isolation-script" class="form-label mt-3">RouterOS script</label>
-    <textarea id="isolation-script" class="form-control font-monospace" rows="22" readonly spellcheck="false">{{ $isolationScript }}</textarea>
-    <div id="copy-isolation-status" class="form-text mt-2" role="status">Script mencadangkan konfigurasi, membuat profile isolir jika belum ada, lalu menyiapkan redirect HTTP khusus pelanggan isolir.</div>
+    <textarea id="isolation-script" class="form-control font-monospace" rows="30" readonly spellcheck="false">{{ $isolationScript }}</textarea>
+    <div id="copy-isolation-status" class="form-text mt-2" role="status">Script hanya disalin saat tombol ditekan. Menjalankannya di router akan mengubah konfigurasi; periksa isi dan backup terlebih dahulu.</div>
     <details class="mt-3">
         <summary class="text-info">Yang dikonfigurasi</summary>
         <ul class="mt-2 mb-0">
             <li>Profile PPP isolir menambahkan IP pelanggan ke address-list FIKSUM-ISOLIR.</li>
-            <li>Web Proxy mengizinkan host halaman billing agar tidak berputar redirect.</li>
+            <li>Filter input membatasi port Web Proxy 8097 hanya untuk IP di address-list isolir.</li>
+            <li>Web Proxy mengizinkan host halaman billing dan mengalihkan HTTP lain.</li>
             <li>NAT mengarahkan HTTP pelanggan dalam address-list itu ke port proxy 8097.</li>
-            <li>Rule lama MSRadius dengan komentar yang dikenal dinonaktifkan.</li>
+            <li>Rule lama MSRadius atau vendor lain tidak dinonaktifkan otomatis.</li>
         </ul>
     </details>
 </section>
