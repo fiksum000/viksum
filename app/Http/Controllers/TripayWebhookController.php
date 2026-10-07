@@ -23,25 +23,38 @@ class TripayWebhookController
         $merchantRef = isset($data['merchant_ref']) ? (string) $data['merchant_ref'] : null;
         $event = $request->header('X-Callback-Event');
         $signatureValid = $tripay->verifyCallbackSignature($raw, $request->header('X-Callback-Signature'));
-        $hash = hash('sha256', $raw);
-
-        DB::table('tripay_callbacks')->insertOrIgnore([
-                'reference' => $reference,
-                'merchant_ref' => $merchantRef,
-                'event' => $event,
-                'payload_hash' => $hash,
-                'signature_valid' => $signatureValid,
-                'processing_status' => $signatureValid ? 'received' : 'rejected_signature',
-                'processing_error' => $signatureValid ? null : 'Invalid callback signature',
-                'payload' => json_encode($data, JSON_THROW_ON_ERROR),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-
-        $callback = DB::table('tripay_callbacks')->where('payload_hash', $hash)->first();
         if (!$signatureValid) {
+            // Do not persist unsigned callbacks: the payload hash is also the idempotency key,
+            // so storing an invalid signature here could block a later legitimate callback.
             return response()->json(['success' => false, 'message' => 'Invalid signature'], 403);
         }
+
+        $hash = hash('sha256', $raw);
+        DB::table('tripay_callbacks')->insertOrIgnore([
+            'reference' => $reference,
+            'merchant_ref' => $merchantRef,
+            'event' => $event,
+            'payload_hash' => $hash,
+            'signature_valid' => true,
+            'processing_status' => 'received',
+            'processing_error' => null,
+            'payload' => json_encode($data, JSON_THROW_ON_ERROR),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $callback = DB::table('tripay_callbacks')->where('payload_hash', $hash)->first();
+        if ($callback && !$callback->signature_valid) {
+            // Heal a hash recorded by older releases before signature verification.
+            DB::table('tripay_callbacks')->where('id', $callback->id)->update([
+                'signature_valid' => true,
+                'processing_status' => 'received',
+                'processing_error' => null,
+                'updated_at' => now(),
+            ]);
+            $callback = DB::table('tripay_callbacks')->where('payload_hash', $hash)->first();
+        }
+
         if ($callback->processing_status === 'processed') {
             return response()->json(['success' => true, 'message' => 'Callback already processed']);
         }
