@@ -33,8 +33,8 @@
     <span class="text-muted">↓ download / ↑ upload saat ini, diperbarui tiap 30 detik untuk pelanggan PPPoE dan Hotspot yang online.</span>
 </div>
 <div class="table-responsive shadow-sm">
-    <table class="table table-sm table-hover mb-0">
-        <thead><tr><th>ID</th><th>Nama</th><th>WhatsApp</th><th>Paket</th><th>Layanan</th><th>Router</th><th>Status layanan</th><th>Tagihan {{ $billingPeriod }}</th><th>Koneksi MikroTik</th><th>Trafik saat ini <span class="small text-muted">↓ / ↑</span></th><th></th></tr></thead>
+    <table class="table table-sm table-hover mb-0 align-middle">
+        <thead><tr><th class="text-nowrap">ID</th><th>Nama</th><th class="text-nowrap">WhatsApp</th><th>Paket</th><th>Layanan</th><th>Router</th><th class="text-nowrap">Status</th><th class="text-nowrap">Tagihan {{ $billingPeriod }}</th><th class="text-nowrap">Koneksi MikroTik</th><th class="text-nowrap">Trafik</th><th></th></tr></thead>
         <tbody>
         @forelse($customers as $c)
             @php
@@ -63,13 +63,13 @@
                 $username = $c->service_type === 'pppoe' ? $c->pppoe_username : $c->hotspot_username;
             @endphp
             <tr>
-                <td>{{$c->customer_code}}</td>
+                <td class="text-nowrap">{{$c->customer_code}}</td>
                 <td>{{$c->name}}</td>
-                <td>{{$c->whatsapp_number?:$c->phone}}</td>
+                <td class="text-nowrap">{{$c->whatsapp_number?:$c->phone}}</td>
                 <td>{{$c->package?->name}}</td>
                 <td><span class="badge text-bg-secondary">{{strtoupper($c->service_type)}}</span><div class="small text-muted">{{$username?:'Username belum diatur'}}</div></td>
                 <td>{{$c->router?->name??'—'}}</td>
-                <td><span class="badge text-bg-{{$serviceStatus[1]}}">{{$serviceStatus[0]}}</span></td>
+                <td class="text-nowrap"><span class="badge text-bg-{{$serviceStatus[1]}}">{{$serviceStatus[0]}}</span></td>
                 <td>
                     <span class="badge rounded-pill" style="{{$billingStatus[1]}}">{{$billingStatus[0]}}</span>
                     @if($currentInvoice)<div class="small text-muted mt-1">Jatuh tempo {{$currentInvoice->due_date?->format('d-m-Y')}}</div>@endif
