@@ -6,6 +6,30 @@
     <p class="text-muted mb-0">Paket billing ditautkan langsung ke router dan profil PPP yang sudah ada. Form ini hanya membaca profil dari MikroTik; tidak membuat atau mengubah profil router.</p>
 </div>
 
+@php
+    $packagesNeedingMapping = $packages->filter(fn ($package) =>
+        !$package->router_id || blank($package->normal_profile) || ($package->fup_enabled && blank($package->fup_speed_after))
+    );
+@endphp
+@if($packagesNeedingMapping->isNotEmpty())
+    <div class="alert alert-warning" role="alert">
+        <strong>Pemetaan paket belum lengkap.</strong> Paket di bawah ini belum siap dipakai untuk provisioning PPP atau FUP sampai dipetakan ke profil yang benar-benar tersedia di router.
+        <ul class="mb-0 mt-2">
+            @foreach($packagesNeedingMapping as $package)
+                <li>
+                    <strong>{{ $package->name }}</strong>:
+                    @if(!$package->router_id || blank($package->normal_profile))
+                        profil normal belum ditautkan ke router.
+                    @endif
+                    @if($package->fup_enabled && blank($package->fup_speed_after))
+                        FUP aktif tetapi profil setelah FUP belum dipilih.
+                    @endif
+                </li>
+            @endforeach
+        </ul>
+    </div>
+@endif
+
 <div class="row g-3 mt-1">
     <div class="col-lg-5">
         <form method="POST" action="{{ route('packages.store') }}" class="card card-body" id="new-package-form">
@@ -48,7 +72,15 @@
                     <tr>
                         <td><strong>{{ $package->name }}</strong><br><span class="text-muted">Rp {{ number_format($package->price, 0, ',', '.') }}/bulan</span></td>
                         <td>{{ $package->router?->name ?? 'Belum ditautkan' }}<br><code>{{ $package->normal_profile }}</code></td>
-                        <td>{{ $package->fup_enabled ? 'Aktif' : 'Tidak aktif' }}</td>
+                        <td>
+                            @if(!$package->fup_enabled)
+                                Tidak aktif
+                            @elseif(blank($package->fup_speed_after))
+                                <span class="text-warning">Aktif — profil FUP belum dipilih</span>
+                            @else
+                                Aktif<br><code>{{ $package->fup_speed_after }}</code>
+                            @endif
+                        </td>
                         <td><details><summary class="btn btn-sm btn-outline-light">Edit</summary>
                             <form method="POST" action="{{ route('packages.update', $package) }}" class="card card-body mt-2 package-edit-form" style="min-width: 280px">
                                 @csrf @method('PUT')
@@ -91,7 +123,7 @@
             if (!routerSelect.value) { status.textContent = 'Pilih router aktif untuk melihat profil yang tersedia.'; return; }
             status.textContent = 'Membaca daftar profil dari router…';
             try {
-                const response = await fetch(`${profileUrl}/${encodeURIComponent(routerSelect.value)}/ppp-profiles/options`, {headers: {Accept: 'application/json'}, credentials: 'same-origin'});
+                const response = await fetch(profileUrl + '/' + encodeURIComponent(routerSelect.value) + '/ppp-profiles/options', {headers: {Accept: 'application/json'}, credentials: 'same-origin'});
                 const payload = await response.json();
                 if (!response.ok) throw new Error(payload.message || 'Profil tidak dapat dibaca.');
                 profileSelect.replaceChildren(new Option('Pilih profil PPP', ''));
@@ -104,9 +136,9 @@
                     payload.profiles.forEach((name) => fupSelect.add(new Option(name, name, false, name === fupPrevious)));
                     fupSelect.disabled = false;
                 }
-                if (fupSelect?.dataset.selected && !payload.profiles.includes(fupSelect.dataset.selected)) status.textContent = `Profil FUP “${fupSelect.dataset.selected}” tidak ditemukan di router ini; pilih profil yang tersedia.`;
-                else if (previous && !payload.profiles.includes(previous)) status.textContent = `Profil tersimpan “${previous}” tidak ditemukan di router ini. Pilih profil yang tersedia.`;
-                else status.textContent = payload.profiles.length ? `${payload.profiles.length} profil tersedia; data hanya dibaca dari MikroTik.` : 'Router belum memiliki profil PPP.';
+                if (fupSelect?.dataset.selected && !payload.profiles.includes(fupSelect.dataset.selected)) status.textContent = 'Profil FUP “' + fupSelect.dataset.selected + '” tidak ditemukan di router ini; pilih profil yang tersedia.';
+                else if (previous && !payload.profiles.includes(previous)) status.textContent = 'Profil tersimpan “' + previous + '” tidak ditemukan di router ini. Pilih profil yang tersedia.';
+                else status.textContent = payload.profiles.length ? payload.profiles.length + ' profil tersedia; data hanya dibaca dari MikroTik.' : 'Router belum memiliki profil PPP.';
             } catch (error) {
                 profileSelect.replaceChildren(new Option('Profil gagal dimuat', ''));
                 status.textContent = error.message;
