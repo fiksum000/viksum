@@ -34,7 +34,7 @@ class CustomerController extends Controller
     {
         return [
             'customer' => $customer,
-            'packages' => Package::orderBy('name')->get(),
+            'packages' => Package::with('router')->orderBy('name')->get(),
             'routers' => Router::orderBy('name')->get(),
             'onus' => Onu::with('olt')->where(function ($q) use ($customer) {
                 $q->whereNull('customer_id');
@@ -75,7 +75,7 @@ class CustomerController extends Controller
 
         $customer = DB::transaction(function () use ($data, $onuId) {
             $customer = Customer::create($data);
-            $customer->pppoe_profile_normal = $customer->pppoe_profile_normal ?: $customer->package?->normal_profile;
+            $customer->pppoe_profile_normal = $customer->package?->normal_profile;
             $customer->save();
             $this->syncOnu($customer, $onuId);
             return $customer;
@@ -129,7 +129,7 @@ class CustomerController extends Controller
 
         DB::transaction(function () use ($customer, $data, $onuId) {
             $customer->update($data);
-            if (!$customer->pppoe_profile_normal) {
+            if ($customer->service_type === 'pppoe') {
                 $customer->update(['pppoe_profile_normal' => $customer->package?->normal_profile]);
             }
             $this->syncOnu($customer, $onuId);
@@ -182,7 +182,7 @@ class CustomerController extends Controller
         $routerOs->createOrUpdatePppSecret($customer->router, [
             'name' => $customer->pppoe_username,
             'password' => $customer->pppoe_password,
-            'profile' => $customer->pppoe_profile_normal ?: $customer->package?->normal_profile ?: 'default',
+            'profile' => $customer->package?->normal_profile ?: 'default',
         ], $previousUsername);
     }
 
@@ -253,7 +253,7 @@ class CustomerController extends Controller
             'grace_days' => 'nullable|integer|min:0|max:31',
             'activated_at' => 'nullable|date',
             'router_id' => [$needsPppSetup ? 'required' : 'nullable', 'exists:routers,id'],
-            'package_id' => [$creating ? 'required' : 'nullable', 'exists:packages,id'],
+            'package_id' => ['required', 'exists:packages,id'],
             'pppoe_username' => [$needsPppSetup ? 'required' : 'nullable', 'max:120', Rule::unique('customers', 'pppoe_username')->ignore($customer?->id)],
             'pppoe_password' => [$needsPppPassword ? 'required' : 'nullable', 'string', 'max:255'],
             'pppoe_ip' => 'nullable|ip',
@@ -274,7 +274,26 @@ class CustomerController extends Controller
             'portal_password' => 'nullable|string|min:8|max:255',
         ]);
 
+        $selectedPackage = Package::findOrFail($data['package_id']);
+        if ($service === 'pppoe' && $status !== 'trial') {
+            if (!$selectedPackage->router_id) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'package_id' => 'Tautkan paket ke router dan profil PPP terlebih dahulu di menu PPPoE → Paket & Profil.',
+                ]);
+            }
+            if ((int) $selectedPackage->router_id !== (int) ($data['router_id'] ?? 0)) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'package_id' => 'Router pelanggan harus sama dengan router yang dipetakan pada paket ini.',
+                ]);
+            }
+        }
+
         $data['customer_code'] = $creating ? $this->newCustomerCode() : $customer->customer_code;
+        if ($service === 'pppoe') {
+            // Billing package is the single source of truth for the PPP profile.
+            $data['pppoe_profile_normal'] = $selectedPackage->normal_profile;
+            $data['fup_speed_after'] = $selectedPackage->fup_speed_after;
+        }
         $data['portal_password'] = filled($data['portal_password'] ?? null)
             ? $data['portal_password']
             : Str::random(16);

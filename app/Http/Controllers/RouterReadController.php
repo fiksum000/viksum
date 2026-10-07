@@ -56,6 +56,30 @@ class RouterReadController extends Controller
         ]);
     }
 
+    /** Read-only profile list for package/customer forms. */
+    public function pppProfileOptions(Router $router, RouterOsService $routerOs)
+    {
+        abort_unless($router->enabled, 404);
+
+        try {
+            $profiles = collect($routerOs->listPppProfiles($router))
+                ->pluck('name')
+                ->filter(fn ($name) => is_string($name) && $name !== '')
+                ->unique()
+                ->sort()
+                ->values();
+
+            return response()->json(['profiles' => $profiles]);
+        } catch (\Throwable $exception) {
+            Log::warning('PPP profile options read failed', [
+                'router_id' => $router->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return response()->json(['message' => 'Profil PPP belum dapat dibaca dari router.'], 502);
+        }
+    }
+
     private function readRows(string $kind, Router $router, RouterOsService $routerOs): array
     {
         $raw = match ($kind) {
@@ -112,4 +136,3 @@ class RouterReadController extends Controller
         };
     }
 }
-
