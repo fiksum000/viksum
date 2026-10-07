@@ -39,17 +39,22 @@ class PublicRegistrationController extends Controller
             ],
             'area' => 'required|string|max:120',
             'address' => 'required|string|max:2000',
-            'village' => 'nullable|string|max:120',
-            'district' => 'nullable|string|max:120',
-            'city' => 'nullable|string|max:120',
-            'latitude' => 'nullable|numeric|between:-90,90',
-            'longitude' => 'nullable|numeric|between:-180,180',
+            'village' => 'required|string|max:120',
+            'district' => 'required|string|max:120',
+            'city' => 'required|string|max:120',
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
             'package_id' => 'required|exists:packages,id',
             'terms' => 'accepted',
         ], [
             'whatsapp_number.unique' => 'Nomor WhatsApp ini sudah terdaftar di Billing. Hubungi admin bila ingin mengajukan layanan tambahan.',
             'whatsapp_number.regex' => 'Masukkan nomor WhatsApp Indonesia yang benar, misalnya 0812… atau 62812… .',
             'terms.accepted' => 'Setujui penggunaan data untuk memproses pemasangan internet.',
+            'village.required' => 'Desa atau kelurahan wajib diisi.',
+            'district.required' => 'Kecamatan wajib diisi.',
+            'city.required' => 'Kota atau kabupaten wajib diisi.',
+            'latitude.required' => 'Latitude wajib diisi. Gunakan tombol lokasi atau isi manual.',
+            'longitude.required' => 'Longitude wajib diisi. Gunakan tombol lokasi atau isi manual.',
         ]);
 
         $package = Package::findOrFail($data['package_id']);

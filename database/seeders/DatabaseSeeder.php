@@ -28,6 +28,7 @@ class DatabaseSeeder extends Seeder
 
         foreach ([
             ['event' => 'billing_reminder', 'name' => 'Pengingat tagihan', 'body' => 'Halo {{name}}, tagihan {{invoice_number}} sebesar Rp {{amount}} jatuh tempo {{due_date}}. Bayar: {{payment_url}}'],
+            ['event' => 'isolation_warning', 'name' => 'Peringatan H-1 isolir', 'body' => 'Halo {{name}}, tagihan {{invoice_number}} sebesar Rp {{amount}} belum dibayar. Layanan internet akan diisolir pada {{isolation_date}} jika pembayaran belum diterima. Bayar: {{payment_url}}'],
             ['event' => 'payment_success', 'name' => 'Pembayaran berhasil', 'body' => 'Halo {{name}}, pembayaran {{invoice_number}} sebesar Rp {{amount}} berhasil kami terima. Terima kasih.'],
             ['event' => 'isolation', 'name' => 'Layanan diisolir', 'body' => 'Halo {{name}}, layanan internet diisolir karena tagihan belum dibayar. Silakan lakukan pembayaran untuk aktivasi kembali.'],
             ['event' => 'broadcast', 'name' => 'Pesan broadcast', 'body' => '{{message}}'],
@@ -36,3 +37,4 @@ class DatabaseSeeder extends Seeder
         }
     }
 }
+

@@ -49,6 +49,14 @@
     @if ($invoice->payment_url)
         <hr><a href="{{ $invoice->payment_url }}" target="_blank" rel="noopener" class="btn btn-outline-primary align-self-start">Buka Halaman Pembayaran</a>
     @endif
+    @if ($invoice->status === 'unpaid')
+        <hr>
+        <form method="POST" action="{{ route('invoices.remind', $invoice) }}" class="align-self-start">
+            @csrf
+            <button class="btn btn-outline-success">Kirim pengingat tagihan ke pelanggan</button>
+            <div class="form-text">Maksimal satu pengingat manual per invoice per hari.</div>
+        </form>
+    @endif
 </section>
 
 @if ($invoice->status === 'unpaid')
@@ -101,3 +109,4 @@
     </div>
 </section>
 @endsection
+

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Invoice;
-use App\Services\{BillingService, TripayService};
+use App\Services\{BillingNotificationService, BillingService, TripayService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Support\Audit;
@@ -64,4 +64,47 @@ class InvoiceController
         Audit::log('invoice.adjusted', Invoice::class, $invoice->id, $amounts);
         return back()->with('success', 'Diskon dan denda invoice diperbarui.');
     }
+
+    public function remind(Request $request, Invoice $invoice, BillingNotificationService $notifications)
+    {
+        if ($invoice->status !== 'unpaid') {
+            return back()->with('error', 'Pengingat hanya dapat dikirim untuk invoice yang belum lunas.');
+        }
+
+        $invoice->loadMissing('customer');
+        $target = $invoice->customer?->whatsapp_number ?: $invoice->customer?->phone;
+        if (! $target) {
+            return back()->with('error', 'Nomor WhatsApp pelanggan belum diisi.');
+        }
+
+        $amount = number_format((int) $invoice->total, 0, ',', '.');
+        $dueDate = $invoice->due_date->format('d-m-Y');
+        $paymentUrl = $invoice->payment_url ?: route('public.pay', $invoice->public_token);
+
+        try {
+            $queued = $notifications->queue($invoice, 'billing_reminder', $target,
+                "Halo {$invoice->customer->name}, pengingat tagihan {$invoice->invoice_number} sebesar Rp {$amount}, jatuh tempo {$dueDate}. Bayar: {$paymentUrl}",
+                [
+                    'name' => $invoice->customer->name,
+                    'invoice_number' => $invoice->invoice_number,
+                    'amount' => $amount,
+                    'due_date' => $dueDate,
+                    'payment_url' => $paymentUrl,
+                    'days_offset' => 'manual',
+                ],
+                now(config('billing.timezone')),
+            );
+        } catch (\Throwable $exception) {
+            report($exception);
+            return back()->with('error', 'Pengingat gagal masuk antrean. Periksa antrean WhatsApp dan coba lagi nanti.');
+        }
+
+        if (! $queued) {
+            return back()->with('error', 'Pengingat untuk invoice ini sudah masuk antrean hari ini.');
+        }
+
+        Audit::log('invoice.reminder_queued', Invoice::class, $invoice->id);
+        return back()->with('success', 'Pengingat tagihan masuk antrean WhatsApp.');
+    }
 }
+
