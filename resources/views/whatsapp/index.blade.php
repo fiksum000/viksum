@@ -3,12 +3,26 @@
 <h1>WhatsApp Fonnte</h1>
 <section class="card card-body mb-4">
     <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-        <div><h2 class="h4 mb-1">WhatsApp Gateway</h2><p class="text-muted mb-1">Kelola koneksi WhatsApp Gateway untuk pengiriman notifikasi, tagihan, dan broadcast.</p><p class="text-muted mb-0">Status: {{ $fonnteConfigured ? 'terhubung dan siap mengirim' : 'belum dikonfigurasi' }}</p></div>
+        <div>
+            <h2 class="h4 mb-1">WhatsApp Gateway</h2>
+            <p class="text-muted mb-2">Kelola koneksi WhatsApp Gateway untuk pengiriman notifikasi, tagihan, dan broadcast.</p>
+            <p class="mb-1"><strong>Pengiriman:</strong> <span class="badge {{ $settings?->fonnte_enabled && $hasFonnteToken ? 'text-bg-success' : 'text-bg-secondary' }}">{{ $settings?->fonnte_enabled && $hasFonnteToken ? 'Aktif' : 'Nonaktif / belum lengkap' }}</span></p>
+            @php($connectionCheck = session('connection_check'))
+            @if($connectionCheck)
+                <div class="alert {{ $connectionCheck['state'] === 'connected' ? 'alert-success' : ($connectionCheck['state'] === 'disconnected' || $connectionCheck['state'] === 'invalid_token' ? 'alert-warning' : 'alert-danger') }} mt-2 mb-0" role="status">
+                    <strong>{{ $connectionCheck['message'] }}</strong>
+                    @if(!empty($connectionCheck['device_name'])) <span>Nama perangkat: {{ $connectionCheck['device_name'] }}.</span> @endif
+                    @if(!empty($connectionCheck['quota'])) <span>Sisa kuota: {{ $connectionCheck['quota'] }}.</span> @endif
+                </div>
+            @else
+                <p class="text-muted small mb-0">Status perangkat belum diperiksa. Tekan “Cek koneksi” untuk memeriksa token dan status WhatsApp langsung ke Fonnte.</p>
+            @endif
+        </div>
     </div>
     <form method="POST" action="{{ route('whatsapp.connection.update') }}" class="row g-3 mt-1">
         @csrf @method('PUT')
         <div class="col-md-6"><label for="fonnte_account_name" class="form-label">Nama akun / identitas koneksi <span class="text-danger">*</span></label><input id="fonnte_account_name" name="fonnte_account_name" class="form-control" value="{{ old('fonnte_account_name', $settings?->fonnte_account_name) }}" minlength="2" maxlength="120" required placeholder="Contoh: Billing RT/RW Net"></div>
-        <div class="col-md-6"><label for="fonnte_api_token" class="form-label">API Key / Token <span class="text-danger">*</span></label><input id="fonnte_api_token" name="fonnte_api_token" type="password" class="form-control" autocomplete="new-password" placeholder="{{ $settings?->fonnte_api_token ? 'Token tersimpan; isi hanya untuk mengganti' : 'Masukkan token device Fonnte' }}"><div class="form-text">Token dienkripsi saat disimpan. Biarkan kosong untuk memakai token yang sudah tersimpan. <a href="https://md.fonnte.com/new/device.php" target="_blank" rel="noopener">Buka halaman device untuk mengambil Token/API Key</a>.</div></div>
+        <div class="col-md-6"><label for="fonnte_api_token" class="form-label">API Key / Token <span class="text-danger">*</span></label><input id="fonnte_api_token" name="fonnte_api_token" type="password" class="form-control" autocomplete="new-password" placeholder="{{ $settings?->fonnte_api_token ? 'Token tersimpan; isi hanya untuk mengganti' : 'Masukkan token device Fonnte' }}"><div class="form-text">Token dienkripsi saat disimpan. Kosongkan untuk tetap memakai token tersimpan; isi token baru hanya jika ingin menggantinya. <a href="https://md.fonnte.com/new/device.php" target="_blank" rel="noopener">Buka halaman device untuk mengambil Token/API Key</a>.</div></div>
         <div class="col-12"><div class="form-check form-switch"><input type="hidden" name="fonnte_enabled" value="0"><input class="form-check-input" type="checkbox" role="switch" id="fonnte_enabled" name="fonnte_enabled" value="1" @checked(old('fonnte_enabled', $settings?->fonnte_enabled ?? false))><label class="form-check-label" for="fonnte_enabled">Aktifkan pengiriman WhatsApp</label></div></div>
         @if($webhookUrl)
             <div class="col-12"><label for="fonnte_webhook_url" class="form-label">Webhook aplikasi (masuk ke Fonnte → Device → Edit)</label><div class="input-group"><input id="fonnte_webhook_url" class="form-control" value="{{ $webhookUrl }}" readonly><button type="button" class="btn btn-outline-light" onclick="navigator.clipboard.writeText(document.getElementById('fonnte_webhook_url').value).then(()=>this.textContent='Tersalin')">Salin URL</button></div><div class="form-text">Aktifkan Auto Read di pengaturan perangkat Fonnte agar webhook menerima pesan masuk. URL ini mengandung token rahasia; jangan dibagikan ke publik.</div></div>
@@ -20,6 +34,17 @@
         @endif
         <div class="col-12 d-flex align-items-center flex-wrap gap-3"><button class="btn btn-primary">Simpan Koneksi</button><a class="link-info" href="https://docs.fonnte.com/webhook-url/" target="_blank" rel="noopener">Petunjuk resmi konfigurasi webhook Fonnte</a></div>
     </form>
+    <div class="d-flex align-items-center flex-wrap gap-2 mt-3">
+        <form method="POST" action="{{ route('whatsapp.connection.check') }}">@csrf
+            <button class="btn btn-outline-info" type="submit" @disabled(!$hasFonnteToken)>Cek koneksi</button>
+        </form>
+        @if($settings?->fonnte_api_token || $settings?->fonnte_webhook_token)
+            <form method="POST" action="{{ route('whatsapp.connection.delete') }}" onsubmit="return confirm('Hapus token Fonnte dan nonaktifkan koneksi WhatsApp? Log dan template pesan tetap disimpan.');">@csrf @method('DELETE')
+                <button class="btn btn-outline-danger" type="submit">Hapus konfigurasi</button>
+            </form>
+        @endif
+        <span class="text-muted small">Untuk mengedit, ubah nama/token lalu simpan. Untuk berhenti sementara, matikan “Aktifkan pengiriman WhatsApp”.</span>
+    </div>
 </section>
 <section class="card card-body mb-4">
     <h2 class="h5">Pesan masuk dari webhook</h2>
