@@ -10,8 +10,8 @@
 @if(in_array($billingUser?->role, ['super_admin','admin','technician'], true))
     <div class="nav-section-label mt-4">Jaringan</div>
     <a class="side-link {{ request()->routeIs('routers.*') ? 'active' : '' }}" href="{{ route('routers.index') }}"><span class="side-icon">⌁</span><span>MikroTik</span></a>
-    <details class="side-group" {{ request()->routeIs('network.read') && str_starts_with(request()->route('page') ?? '', 'hotspot.') ? 'open' : '' }}>
-        <summary class="side-link {{ request()->routeIs('network.read') && str_starts_with(request()->route('page') ?? '', 'hotspot.') ? 'active' : '' }}"><span class="side-icon">◉</span><span>Hotspot</span></summary>
+    <details class="side-group" {{ (request()->routeIs('network.read') && str_starts_with(request()->route('page') ?? '', 'hotspot.')) || request()->routeIs('hotspot.index') ? 'open' : '' }}>
+        <summary class="side-link {{ (request()->routeIs('network.read') && str_starts_with(request()->route('page') ?? '', 'hotspot.')) || request()->routeIs('hotspot.index') ? 'active' : '' }}"><span class="side-icon">◉</span><span>Hotspot</span></summary>
         <div class="side-submenu">
             <a class="side-link {{ request()->route('page') === 'hotspot.users' ? 'active' : '' }}" href="{{ route('network.read', ['page' => 'hotspot.users']) }}">Hotspot Users</a>
             <a class="side-link {{ request()->route('page') === 'hotspot.active-users' ? 'active' : '' }}" href="{{ route('network.read', ['page' => 'hotspot.active-users']) }}">Hotspot Active</a>
