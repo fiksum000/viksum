@@ -4,13 +4,14 @@ namespace App\Http\Controllers;
 use App\Models\{Customer, FupState, Onu, Package, Router};
 use App\Services\FupService;
 use App\Services\RouterOsService;
+
 use App\Services\CustomerQueryService;
 use App\Support\Audit;
+use App\Support\CustomerIdentity;
 use App\Support\WhatsappNumber;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 
@@ -100,7 +101,7 @@ class CustomerController extends Controller
     private function newCustomerCode(): string
     {
         do {
-            $code = 'CUST-'.Str::upper(Str::random(12));
+            $code = CustomerIdentity::newCustomerCode();
         } while (Customer::where('customer_code', $code)->exists());
 
         return $code;
@@ -110,7 +111,7 @@ class CustomerController extends Controller
     {
         $customer = new Customer(['customer_code' => $this->newCustomerCode()]);
         return view('customers.form', $this->formData($customer) + [
-            'portalPassword' => old('portal_password', Str::random(16)),
+            'portalPassword' => old('portal_password', CustomerIdentity::newPortalPassword()),
         ]);
     }
 
@@ -319,7 +320,7 @@ class CustomerController extends Controller
             'fup_limit_gb' => 'nullable|numeric|min:0|max:100000',
             'fup_speed_after' => 'nullable|max:50',
             'is_auto_isolate' => 'nullable|boolean',
-            'portal_password' => 'nullable|string|min:8|max:255',
+            'portal_password' => ['nullable', 'string', 'size:8', 'regex:/^[A-Za-z0-9]{8}$/'],
         ]);
 
         $selectedPackage = Package::findOrFail($data['package_id']);
@@ -344,7 +345,7 @@ class CustomerController extends Controller
         }
         $data['portal_password'] = filled($data['portal_password'] ?? null)
             ? $data['portal_password']
-            : Str::random(16);
+            : CustomerIdentity::newPortalPassword();
 
         $fupMode = $data['fup_mode'];
         unset($data['fup_mode']);
