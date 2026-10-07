@@ -97,12 +97,19 @@ class InvoiceController
         $amount = number_format((int) $invoice->total, 0, ',', '.');
         $dueDate = $invoice->due_date->format('d-m-Y');
         $paymentUrl = $invoice->payment_url ?: route('public.pay', $invoice->public_token);
+        $customer = $invoice->customer;
+        $serviceUsername = $customer->service_type === 'pppoe' ? $customer->pppoe_username : $customer->hotspot_username;
 
         try {
             $queued = $notifications->queue($invoice, 'billing_reminder', $target,
-                "Halo {$invoice->customer->name}, pengingat tagihan {$invoice->invoice_number} sebesar Rp {$amount}, jatuh tempo {$dueDate}. Bayar: {$paymentUrl}",
+                "Yth. {$customer->name}, kami mengingatkan tagihan {$invoice->invoice_number} sebesar Rp {$amount} yang jatuh tempo pada {$dueDate}. ID pelanggan: {$customer->customer_code}. Username layanan: {$serviceUsername}. Silakan bayar melalui {$paymentUrl}. Portal pelanggan: ".route('portal.login')." (ID login: {$customer->customer_code}). Terima kasih.",
                 [
-                    'name' => $invoice->customer->name,
+                    'name' => $customer->name,
+                    'customer_code' => $customer->customer_code,
+                    'portal_username' => $customer->customer_code,
+                    'service_username' => $serviceUsername,
+                    'pppoe_username' => $customer->pppoe_username,
+                    'portal_url' => route('portal.login'),
                     'invoice_number' => $invoice->invoice_number,
                     'amount' => $amount,
                     'due_date' => $dueDate,
