@@ -43,13 +43,29 @@ class CustomerTrafficController extends Controller
             try {
                 $serviceTypes = $routerCustomers->pluck('service_type')->unique();
                 $sessionsByService = [];
-                if ($serviceTypes->contains('pppoe')) $sessionsByService['pppoe'] = $routerOs->activePppTrafficMap($router);
+                if ($serviceTypes->contains('pppoe')) {
+                    $pppoeUsernames = $routerCustomers
+                        ->where('service_type', 'pppoe')
+                        ->pluck('pppoe_username')
+                        ->filter(fn ($username) => filled($username))
+                        ->map(fn ($username) => (string) $username)
+                        ->all();
+                    $sessionsByService['pppoe'] = $routerOs->activePppTrafficMap($router, $pppoeUsernames);
+                }
                 if ($serviceTypes->contains('hotspot')) $sessionsByService['hotspot'] = $routerOs->activeHotspotTrafficMap($router);
 
                 foreach ($routerCustomers as $customer) {
                     $username = (string) ($customer->service_type === 'pppoe' ? $customer->pppoe_username : $customer->hotspot_username);
                     $session = $sessionsByService[$customer->service_type][$username] ?? null;
                     if (!$session) { $traffic[$customer->id] = ['state' => 'offline']; continue; }
+                    if (array_key_exists('download_bps', $session) || array_key_exists('upload_bps', $session)) {
+                        $download = $session['download_bps'] ?? null;
+                        $upload = $session['upload_bps'] ?? null;
+                        $traffic[$customer->id] = is_numeric($download) && is_numeric($upload)
+                            ? ['state' => 'online', 'download_bps' => max(0, (int) $download), 'upload_bps' => max(0, (int) $upload)]
+                            : ['state' => 'unavailable'];
+                        continue;
+                    }
                     if (!is_numeric($session['download_bytes'] ?? null) || !is_numeric($session['upload_bytes'] ?? null)) {
                         $traffic[$customer->id] = ['state' => 'unavailable'];
                         continue;

@@ -68,21 +68,62 @@ class RouterOsService {
   public function setHotspotUserEnabled(Router $router,string $username,bool $enabled):void{$client=$this->client($router);$rows=$client->query((new Query('/ip/hotspot/user/print'))->where('name',$username))->read();$id=$rows[0]['.id']??null;if(!$id)throw new RuntimeException("Hotspot user {$username} tidak ditemukan.");$client->query((new Query('/ip/hotspot/user/set'))->equal('.id',$id)->equal('disabled',$enabled?'no':'yes'))->read();}
   public function disconnectHotspotActive(Router $router,string $username):void{$client=$this->client($router);$rows=$client->query((new Query('/ip/hotspot/active/print'))->where('user',$username))->read();foreach($rows as $row){if(isset($row['.id']))$client->query((new Query('/ip/hotspot/active/remove'))->equal('.id',$row['.id']))->read();}}
     public function deleteHotspotUser(Router $router,string $username):void{$client=$this->client($router);$rows=$client->query((new Query('/ip/hotspot/user/print'))->where('name',$username))->read();foreach($rows as $row){if(isset($row['.id']))$client->query((new Query('/ip/hotspot/user/remove'))->equal('.id',$row['.id']))->read();}}
-  /** Read active PPPoE session counters without changing RouterOS state. */
-  public function activePppTrafficMap(Router $router):array
+  /** Read current per-session PPPoE rates without changing RouterOS configuration. */
+  public function activePppTrafficMap(Router $router, array $usernames = []):array
   {
-    $rows=$this->client($router)->query((new Query('/ppp/active/print'))->equal('stats',''))->read();
-    $out=[];
-    foreach($rows as $row){
-      $name=$row['name']??null;
-      if(!$name || ($row['service']??'pppoe')!=='pppoe') continue;
-      $download=null; $upload=null; $bytes=$row['bytes']??null;
-      if(is_string($bytes) && preg_match('/^(\d+)\/(\d+)$/',$bytes,$matches)){
-        $download=(int)$matches[1]; $upload=(int)$matches[2];
-      } elseif(isset($row['bytes-in'],$row['bytes-out']) && is_numeric($row['bytes-in']) && is_numeric($row['bytes-out'])) {
-        $upload=(int)$row['bytes-in']; $download=(int)$row['bytes-out'];
+    $requested = [];
+    foreach ($usernames as $username) {
+      if (is_string($username) && $username !== '') $requested[$username] = true;
+    }
+    if ($requested === []) return [];
+
+    $client = $this->client($router);
+    $rows = $client->query('/ppp/active/print')->read();
+    $interfaces = $client->query('/interface/print')->read();
+    $active = [];
+    foreach ($rows as $row) {
+      $name = $row['name'] ?? null;
+      if ($name && ($row['service'] ?? 'pppoe') === 'pppoe' && isset($requested[$name])) {
+        $active[$name] = $row;
       }
-      $out[$name]=['session_id'=>(string)($row['session-id']??''),'caller_id'=>(string)($row['caller-id']??''),'address'=>(string)($row['address']??''),'download_bytes'=>$download,'upload_bytes'=>$upload];
+    }
+
+    $pppoeInterfaces = [];
+    foreach ($interfaces as $interface) {
+      $name = $interface['name'] ?? '';
+      if (($interface['type'] ?? '') !== 'pppoe-in'
+        || !str_starts_with($name, '<pppoe-')
+        || !str_ends_with($name, '>')) continue;
+      $pppoeInterfaces[substr($name, strlen('<pppoe-'), -1)] = $name;
+    }
+
+    $out = [];
+    foreach ($active as $username => $row) {
+      $out[$username] = [
+        'session_id' => (string) ($row['session-id'] ?? ''),
+        'caller_id' => (string) ($row['caller-id'] ?? ''),
+        'address' => (string) ($row['address'] ?? ''),
+        'download_bps' => null,
+        'upload_bps' => null,
+      ];
+
+      $interface = $pppoeInterfaces[$username] ?? null;
+      if (!$interface) continue;
+
+      try {
+        $sample = $client->query((new Query('/interface/monitor-traffic'))
+          ->equal('interface', $interface)
+          ->equal('once', ''))->read()[0] ?? [];
+        $rx = $sample['rx-bits-per-second'] ?? null;
+        $tx = $sample['tx-bits-per-second'] ?? null;
+        if (is_numeric($rx) && is_numeric($tx)) {
+          // On a PPPoE interface, RX is customer upload and TX is download.
+          $out[$username]['download_bps'] = max(0, (int) $tx);
+          $out[$username]['upload_bps'] = max(0, (int) $rx);
+        }
+      } catch (\Throwable) {
+        // Keep the active session visible; a per-interface read failure is not offline.
+      }
     }
     return $out;
   }
