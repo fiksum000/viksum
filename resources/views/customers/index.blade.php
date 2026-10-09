@@ -55,7 +55,7 @@
 </div>
 <div class="table-responsive shadow-sm">
     <table class="table table-sm table-hover mb-0 align-middle">
-        <thead class="text-center"><tr><th class="text-nowrap text-center">ID</th><th>Nama</th><th class="text-nowrap text-center">WhatsApp</th><th>Paket</th><th>Layanan</th><th>Router</th><th class="text-nowrap">Status</th><th class="text-nowrap">Tagihan {{ $billingPeriod }}</th><th class="text-nowrap">MikroTik</th><th class="text-nowrap">Trafik</th><th></th></tr></thead>
+        <thead class="text-center"><tr><th class="text-nowrap text-center">ID</th><th>Nama</th><th class="text-nowrap text-center">WhatsApp</th><th>Paket</th><th>Layanan</th><th>Router</th><th class="text-nowrap">Status</th><th class="text-nowrap">Tagihan {{ $billingPeriod }}</th><th class="text-nowrap">MikroTik</th><th class="text-nowrap text-center">Trafik</th><th class="text-nowrap text-center">Aksi</th></tr></thead>
         <tbody>
         @forelse($customers as $c)
             @php
@@ -100,7 +100,7 @@
                     @if($c->live_connection_status==='unknown')<div class="small text-muted mt-1">Router tidak dapat dibaca</div>@endif
                 </td>
                 <td>@if(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='online')<span class="badge rounded-pill bg-secondary-subtle text-light border border-secondary-subtle" data-customer-traffic-id="{{$c->id}}" aria-label="Menunggu sampel trafik">Mengukur…</span>@elseif(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='offline')<span class="small text-muted">Offline</span>@elseif(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='unknown')<span class="small text-muted">Tidak diketahui</span>@else<span class="small text-muted">—</span>@endif</td>
-                <td>@if(in_array($billingUser?->role,['super_admin','admin','operator'],true))<a href="{{route('customers.edit',$c)}}" class="btn btn-sm btn-outline-secondary">Edit</a>@endif</td>
+                <td class="text-nowrap text-center">@if(in_array($billingUser?->role,['super_admin','admin','operator'],true))<a href="{{route('customers.edit',$c)}}" class="btn btn-sm btn-outline-secondary">Edit</a>@endif</td>
             </tr>
         @empty
             <tr><td colspan="11" class="text-center p-4">Belum ada pelanggan.</td></tr>
