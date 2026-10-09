@@ -100,7 +100,7 @@
                     @if($c->live_connection_status==='unknown')<div class="small text-muted mt-1">Router tidak dapat dibaca</div>@endif
                 </td>
                 <td>@if(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='online')<span class="badge rounded-pill bg-secondary-subtle text-light border border-secondary-subtle" data-customer-traffic-id="{{$c->id}}" aria-label="Menunggu sampel trafik">Mengukur…</span>@elseif(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='offline')<span class="small text-muted">Offline</span>@elseif(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='unknown')<span class="small text-muted">Tidak diketahui</span>@else<span class="small text-muted">—</span>@endif</td>
-                <td class="text-nowrap text-center">@if(in_array($billingUser?->role,['super_admin','admin','operator'],true))<a href="{{route('customers.edit',$c)}}" class="btn btn-sm btn-outline-secondary">Edit</a>@endif</td>
+                <td class="text-nowrap text-center"><div class="d-inline-flex align-items-center justify-content-center gap-1">@if(in_array($billingUser?->role,['super_admin','admin','operator'],true))<a href="{{route('customers.edit',$c)}}" class="btn btn-sm btn-outline-secondary">Edit</a><form method="POST" action="{{route('customers.destroy',$c)}}" onsubmit="return confirm('Hapus pelanggan dari daftar aktif? Riwayat tagihan tetap disimpan dan MikroTik tidak diubah.')">@csrf @method('DELETE')<button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button></form>@endif</div></td>
             </tr>
         @empty
             <tr><td colspan="11" class="text-center p-4">Belum ada pelanggan.</td></tr>
