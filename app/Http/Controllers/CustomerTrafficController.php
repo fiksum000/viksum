@@ -27,13 +27,9 @@ class CustomerTrafficController extends Controller
         $customers = $customerQuery->filtered($filters)->paginate(25, ['*'], 'page', $page)->getCollection();
         $traffic = [];
 
-        $configured = $customers->filter(fn (Customer $customer) =>
-            in_array($customer->service_type, ['pppoe', 'hotspot'], true)
+        foreach ($customers->filter(fn (Customer $customer) => in_array($customer->service_type, ['pppoe', 'hotspot'], true)
             && filled($customer->service_type === 'pppoe' ? $customer->pppoe_username : $customer->hotspot_username)
-            && $customer->router_id
-        )->groupBy('router_id');
-
-        foreach ($configured as $routerCustomers) {
+            && $customer->router_id)->groupBy('router_id') as $routerId => $routerCustomers) {
             $router = $routerCustomers->first()->router;
             if (!$router || !$router->enabled) {
                 foreach ($routerCustomers as $customer) $traffic[$customer->id] = ['state' => 'unknown'];
@@ -43,13 +39,33 @@ class CustomerTrafficController extends Controller
             try {
                 $serviceTypes = $routerCustomers->pluck('service_type')->unique();
                 $sessionsByService = [];
-                if ($serviceTypes->contains('pppoe')) $sessionsByService['pppoe'] = $routerOs->activePppTrafficMap($router);
+                if ($serviceTypes->contains('pppoe')) {
+                    $pppoeUsernames = $routerCustomers
+                        ->where('service_type', 'pppoe')
+                        ->pluck('pppoe_username')
+                        ->filter(fn ($username) => filled($username))
+                        ->map(fn ($username) => (string) $username)
+                        ->all();
+                    $sessionsByService['pppoe'] = $routerOs->activePppTrafficMap($router, $pppoeUsernames);
+                }
                 if ($serviceTypes->contains('hotspot')) $sessionsByService['hotspot'] = $routerOs->activeHotspotTrafficMap($router);
-
                 foreach ($routerCustomers as $customer) {
                     $username = (string) ($customer->service_type === 'pppoe' ? $customer->pppoe_username : $customer->hotspot_username);
-                    $session = $sessionsByService[$customer->service_type][$username] ?? null;
-                    if (!$session) { $traffic[$customer->id] = ['state' => 'offline']; continue; }
+                    $sessions = $sessionsByService[$customer->service_type] ?? [];
+                    if (!isset($sessions[$username])) {
+                        $traffic[$customer->id] = ['state' => 'offline'];
+                        continue;
+                    }
+
+                    $session = $sessions[$username];
+                    if (array_key_exists('download_bps', $session) || array_key_exists('upload_bps', $session)) {
+                        $download = $session['download_bps'] ?? null;
+                        $upload = $session['upload_bps'] ?? null;
+                        $traffic[$customer->id] = is_numeric($download) && is_numeric($upload)
+                            ? ['state' => 'online', 'download_bps' => max(0, (int) $download), 'upload_bps' => max(0, (int) $upload)]
+                            : ['state' => 'unavailable'];
+                        continue;
+                    }
                     if (!is_numeric($session['download_bytes'] ?? null) || !is_numeric($session['upload_bytes'] ?? null)) {
                         $traffic[$customer->id] = ['state' => 'unavailable'];
                         continue;
@@ -58,14 +74,22 @@ class CustomerTrafficController extends Controller
                     $sessionIdentity = $session['session_id'] ?: implode('|', [$username, $session['caller_id'], $session['address']]);
                     $cacheKey = 'customer-traffic:'.$router->id.':'.hash('sha256', $customer->service_type.'|'.$sessionIdentity);
                     $now = now()->getTimestamp();
-                    $current = ['sampled_at' => $now, 'download_bytes' => (int) $session['download_bytes'], 'upload_bytes' => (int) $session['upload_bytes']];
+                    $current = [
+                        'sampled_at' => $now,
+                        'download_bytes' => (int) $session['download_bytes'],
+                        'upload_bytes' => (int) $session['upload_bytes'],
+                    ];
                     $previous = Cache::get($cacheKey);
                     Cache::put($cacheKey, $current, now()->addMinutes(3));
                     $rate = is_array($previous) ? PppTrafficRate::fromSamples($previous, $current) : null;
-                    $traffic[$customer->id] = $rate ? ['state' => 'online', ...$rate] : ['state' => 'sampling'];
+                    $traffic[$customer->id] = $rate
+                        ? ['state' => 'online', ...$rate]
+                        : ['state' => 'sampling'];
                 }
             } catch (\Throwable) {
-                Log::warning('Customer traffic read failed', ['router_id' => $router->id]);
+                Log::warning('Customer PPP traffic read failed', [
+                    'router_id' => $router->id,
+                ]);
                 foreach ($routerCustomers as $customer) $traffic[$customer->id] = ['state' => 'unknown'];
             }
         }
@@ -81,3 +105,4 @@ class CustomerTrafficController extends Controller
         ])->header('Cache-Control', 'no-store, private');
     }
 }
+
