@@ -48,6 +48,30 @@
     </div>
 </section>
 <section class="card card-body mb-4">
+    <div class="row g-3 align-items-center">
+        <div class="col-md-3">
+            @if($companyLogoUrl)
+                <img src="{{ $companyLogoUrl }}" alt="Logo perusahaan saat ini" class="img-fluid rounded border p-2" style="max-height:120px;max-width:220px;object-fit:contain">
+            @else
+                <div class="rounded border text-muted d-flex align-items-center justify-content-center" style="height:100px;max-width:220px">Belum ada logo</div>
+            @endif
+        </div>
+        <div class="col-md-9">
+            <h2 class="h5 mb-1">Logo perusahaan</h2>
+            <p class="text-muted small mb-2">Logo FIKSUM dikirim sebagai gambar bersama pengingat tagihan, peringatan isolir, konfirmasi lunas, dan pemberitahuan isolir. Pastikan APP_URL memakai alamat HTTPS publik. Lampiran gambar Fonnte memerlukan paket yang mendukung pengiriman media.</p>
+            <form method="POST" action="{{ route('whatsapp.company-logo.upload') }}" enctype="multipart/form-data" class="d-flex align-items-center flex-wrap gap-2">
+                @csrf
+                <input type="file" name="company_logo" class="form-control" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required style="max-width:360px">
+                <button class="btn btn-primary">{{ $companyLogoUrl ? 'Ganti logo' : 'Unggah logo' }}</button>
+            </form>
+            <div class="form-text">JPG, PNG, atau WebP; maksimal 2 MB dan 2000 × 2000 piksel. Gunakan logo milik perusahaan sendiri.</div>
+            @if($companyLogoUrl)
+                <form method="POST" action="{{ route('whatsapp.company-logo.delete') }}" class="mt-2" onsubmit="return confirm('Hapus logo perusahaan?')">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger">Hapus logo</button></form>
+            @endif
+        </div>
+    </div>
+</section>
+<section class="card card-body mb-4">
     <h2 class="h5">Pesan masuk dari webhook</h2>
     <p class="text-muted small">Webhook hanya mencatat pesan dan status perangkat. Aplikasi belum membalas pesan masuk secara otomatis.</p>
     <div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Waktu</th><th>Pengirim / perangkat</th><th>Jenis</th><th>Pesan / status</th></tr></thead><tbody>
@@ -72,11 +96,12 @@
         <h2 class="h5">Template pesan</h2>
         @foreach($templates as $template)
             <form method="POST" action="{{ route('whatsapp.templates.update',$template) }}" class="card card-body mb-3">@csrf @method('PUT')
-                <div class="row g-2"><div class="col-md-4"><label class="form-label">Nama</label><input name="name" value="{{ $template->name }}" class="form-control" required><div class="text-muted small mt-1">Event: {{ $template->event }}</div></div><div class="col-md-8"><label class="form-label">Isi template</label><textarea name="body" class="form-control" rows="3" required>{{ $template->body }}</textarea><div class="text-muted small mt-1">Placeholder: &#123;&#123;name&#125;&#125;, &#123;&#123;customer_code&#125;&#125;, &#123;&#123;portal_username&#125;&#125;, &#123;&#123;service_username&#125;&#125;, &#123;&#123;pppoe_username&#125;&#125;, &#123;&#123;portal_url&#125;&#125;, &#123;&#123;invoice_number&#125;&#125;, &#123;&#123;amount&#125;&#125;, &#123;&#123;due_date&#125;&#125;, &#123;&#123;isolation_date&#125;&#125;, &#123;&#123;payment_url&#125;&#125;, &#123;&#123;message&#125;&#125; <span class="text-muted">(ID portal = ID pelanggan; sandi portal tidak dikirim melalui WA.)</span></div></div></div>
+                <div class="row g-2"><div class="col-md-4"><label class="form-label">Nama</label><input name="name" value="{{ $template->name }}" class="form-control" required><div class="text-muted small mt-1">Event: {{ $template->event }}</div></div><div class="col-md-8"><label class="form-label">Isi template</label><textarea name="body" class="form-control" rows="8" required>{{ $template->body }}</textarea><div class="text-muted small mt-1">Placeholder: &#123;&#123;name&#125;&#125;, &#123;&#123;customer_code&#125;&#125;, &#123;&#123;portal_username&#125;&#125;, &#123;&#123;service_username&#125;&#125;, &#123;&#123;pppoe_username&#125;&#125;, &#123;&#123;portal_url&#125;&#125;, &#123;&#123;invoice_number&#125;&#125;, &#123;&#123;amount&#125;&#125;, &#123;&#123;due_date&#125;&#125;, &#123;&#123;isolation_date&#125;&#125;, &#123;&#123;payment_url&#125;&#125;, &#123;&#123;message&#125;&#125; <span class="text-muted">(ID portal = ID pelanggan; sandi portal tidak dikirim melalui WA.)</span></div></div></div>
                 <div class="d-flex justify-content-between align-items-center mt-3"><div class="form-check"><input type="hidden" name="enabled" value="0"><input type="checkbox" name="enabled" value="1" class="form-check-input" id="enabled-{{ $template->id }}" @checked($template->enabled)><label class="form-check-label" for="enabled-{{ $template->id }}">Aktif</label></div><button class="btn btn-outline-primary">Simpan template</button></div>
             </form>
         @endforeach
     </div>
 </div>
 @endsection
+
 

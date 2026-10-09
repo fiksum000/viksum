@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class IntegrationSetting extends Model
 {
-    protected $fillable = ['fonnte_enabled', 'fonnte_account_name', 'fonnte_api_token', 'fonnte_webhook_token', 'updated_by'];
+    protected $fillable = ['fonnte_enabled', 'fonnte_account_name', 'fonnte_api_token', 'fonnte_webhook_token', 'company_logo_path', 'updated_by'];
 
     protected function casts(): array
     {
@@ -17,3 +17,4 @@ class IntegrationSetting extends Model
         ];
     }
 }
+

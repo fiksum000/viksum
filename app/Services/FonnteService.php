@@ -7,6 +7,7 @@ use App\Models\WaLog;
 use App\Models\WaTemplate;
 use App\Models\IntegrationSetting;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -102,6 +103,13 @@ class FonnteService
         }
 
         $payload = ['target' => $target, 'message' => $message, 'delay' => (string) config('services.fonnte.delay')];
+        if (in_array($event, ['billing_reminder', 'isolation_warning', 'payment_success', 'isolation'], true) && filled($settings?->company_logo_path)) {
+            $logoUrl = Storage::disk('public')->url($settings->company_logo_path);
+            $logoScheme = parse_url($logoUrl, PHP_URL_SCHEME);
+            if (is_string($logoScheme) && strtolower($logoScheme) === 'https' && filter_var($logoUrl, FILTER_VALIDATE_URL)) {
+                $payload['url'] = $logoUrl;
+            }
+        }
         try {
             $response = Http::timeout(20)
                 ->withHeaders(['Authorization' => $token])
@@ -162,4 +170,5 @@ class FonnteService
         return $success ? 'Permintaan diterima Fonnte.' : 'Fonnte menolak pengiriman pesan.';
     }
 }
+
 

@@ -8,7 +8,7 @@ use App\Models\WaLog;
 use App\Services\FonnteService;
 use App\Support\Audit;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class WaTemplateController extends Controller
@@ -20,6 +20,7 @@ class WaTemplateController extends Controller
             'templates' => WaTemplate::orderBy('name')->get(),
             'settings' => $settings,
             'hasFonnteToken' => filled($settings?->fonnte_api_token ?: config('services.fonnte.token')),
+            'companyLogoUrl' => $settings?->company_logo_path ? Storage::disk('public')->url($settings->company_logo_path) : null,
             'webhookUrl' => $settings?->fonnte_webhook_token ? route('fonnte.webhook', $settings->fonnte_webhook_token) : null,
             'incomingLogs' => WaLog::whereIn('event', ['incoming', 'device_status'])->latest()->limit(20)->get(),
         ]);
@@ -89,4 +90,47 @@ class WaTemplateController extends Controller
         Audit::log('wa_template.updated', WaTemplate::class, $template->id);
         return back()->with('success', 'Template WhatsApp diperbarui.');
     }
+
+    public function uploadCompanyLogo(Request $request)
+    {
+        $data = $request->validate([
+            'company_logo' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048', 'dimensions:max_width=2000,max_height=2000'],
+        ]);
+
+        $settings = IntegrationSetting::query()->find(1) ?? new IntegrationSetting(['id' => 1]);
+        $previousPath = $settings->company_logo_path;
+        $path = $data['company_logo']->storePublicly('company-logos', 'public');
+        if (! $path) {
+            return back()->withErrors(['company_logo' => 'Logo gagal disimpan. Silakan coba lagi.']);
+        }
+
+        $settings->company_logo_path = $path;
+        $settings->updated_by = session('user_id');
+        $settings->save();
+
+        if ($previousPath && $previousPath !== $path) {
+            Storage::disk('public')->delete($previousPath);
+        }
+        Audit::log('whatsapp.company_logo_uploaded', IntegrationSetting::class, $settings->id);
+
+        return back()->with('success', 'Logo perusahaan berhasil diperbarui. Logo akan ikut pada notifikasi tagihan dan pembayaran.');
+    }
+
+    public function deleteCompanyLogo()
+    {
+        $settings = IntegrationSetting::query()->find(1);
+        if (! $settings?->company_logo_path) {
+            return back()->with('info', 'Belum ada logo perusahaan yang tersimpan.');
+        }
+
+        $path = $settings->company_logo_path;
+        $settings->company_logo_path = null;
+        $settings->updated_by = session('user_id');
+        $settings->save();
+        Storage::disk('public')->delete($path);
+        Audit::log('whatsapp.company_logo_deleted', IntegrationSetting::class, $settings->id);
+
+        return back()->with('success', 'Logo perusahaan dihapus.');
+    }
 }
+

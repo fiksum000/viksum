@@ -27,14 +27,15 @@ class DatabaseSeeder extends Seeder
         Package::firstOrCreate(['name' => '20 Mbps'], ['price' => 200000, 'normal_profile' => '20M', 'normal_speed' => '20 Mbps', 'fup_enabled' => true, 'fup_limit_bytes' => 536870912000, 'fup_speed_after' => '5M', 'priority' => 8]);
 
         foreach ([
-            ['event' => 'billing_reminder', 'name' => 'Pengingat tagihan', 'body' => Yth. {{name}}, kami mengingatkan tagihan {{invoice_number}} sebesar Rp {{amount}} yang jatuh tempo pada {{due_date}}. ID pelanggan: {{customer_code}}. Username layanan: {{service_username}}. Silakan lakukan pembayaran melalui {{payment_url}}. Portal pelanggan: {{portal_url}} (ID login: {{portal_username}}). Terima kasih.],
-            ['event' => 'isolation_warning', 'name' => 'Peringatan H-1 isolir', 'body' => Yth. {{name}}, tagihan {{invoice_number}} sebesar Rp {{amount}} belum kami terima. Mohon lakukan pembayaran sebelum {{isolation_date}} agar layanan tidak diisolir. ID pelanggan: {{customer_code}}. Username layanan: {{service_username}}. Pembayaran: {{payment_url}}. Portal pelanggan: {{portal_url}} (ID login: {{portal_username}}). Terima kasih.],
-            ['event' => 'payment_success', 'name' => 'Pembayaran berhasil', 'body' => Yth. {{name}}, pembayaran {{invoice_number}} sebesar Rp {{amount}} telah kami terima. Terima kasih telah melakukan pembayaran. ID pelanggan: {{customer_code}}. Username layanan: {{service_username}}. Portal pelanggan: {{portal_url}} (ID login: {{portal_username}}).],
-            ['event' => 'isolation', 'name' => 'Layanan diisolir', 'body' => Yth. {{name}}, layanan internet Anda telah diisolir sementara karena tagihan belum dibayar. Silakan selesaikan pembayaran agar layanan dapat dipulihkan. ID pelanggan: {{customer_code}}. Username layanan: {{service_username}}. Portal pelanggan: {{portal_url}} (ID login: {{portal_username}}). Terima kasih.],
+            ['event' => 'billing_reminder', 'name' => 'Pengingat tagihan', 'body' => "Yth. {{name}},\n\nKami mengingatkan tagihan internet Anda:\nNo. invoice: {{invoice_number}}\nID pelanggan: {{customer_code}}\nUsername layanan: {{service_username}}\nJumlah tagihan: Rp {{amount}}\nJatuh tempo: {{due_date}}\n\nPembayaran: {{payment_url}}\nPortal pelanggan: {{portal_url}}\nID login: {{portal_username}}\n\nTerima kasih.\nFIKSUM"],
+            ['event' => 'isolation_warning', 'name' => 'Peringatan H-1 isolir', 'body' => "Yth. {{name}},\n\nTagihan internet Anda belum kami terima:\nNo. invoice: {{invoice_number}}\nID pelanggan: {{customer_code}}\nUsername layanan: {{service_username}}\nJumlah tagihan: Rp {{amount}}\nBatas pembayaran: {{isolation_date}}\n\nPembayaran: {{payment_url}}\nPortal pelanggan: {{portal_url}}\nID login: {{portal_username}}\n\nMohon lakukan pembayaran sebelum batas waktu agar layanan tidak diisolir.\nFIKSUM"],
+            ['event' => 'payment_success', 'name' => 'Pembayaran berhasil', 'body' => "Yth. {{name}},\n\nKonfirmasi pembayaran\nNo. invoice: {{invoice_number}}\nStatus: Lunas\nID pelanggan: {{customer_code}}\nUsername layanan: {{service_username}}\nJumlah dibayar: Rp {{amount}}\n\nPortal pelanggan: {{portal_url}}\nID login: {{portal_username}}\n\nTerima kasih atas pembayaran Anda.\nFIKSUM"],
+            ['event' => 'isolation', 'name' => 'Layanan diisolir', 'body' => "Yth. {{name}},\n\nLayanan internet Anda sedang diisolir karena tagihan belum dibayar.\nID pelanggan: {{customer_code}}\nUsername layanan: {{service_username}}\n\nSelesaikan pembayaran melalui portal pelanggan: {{portal_url}}\nID login: {{portal_username}}\n\nSetelah pembayaran diterima, layanan akan diproses untuk aktif kembali.\nFIKSUM"],
             ['event' => 'broadcast', 'name' => 'Pesan broadcast', 'body' => '{{message}}'],
         ] as $template) {
             WaTemplate::firstOrCreate(['event' => $template['event']], $template + ['enabled' => true]);
         }
     }
 }
+
 
