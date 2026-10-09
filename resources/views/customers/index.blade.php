@@ -9,13 +9,7 @@
         @if(in_array($billingUser?->role,['super_admin','admin'],true))
             <form method="POST" action="{{route('customers.import')}}" enctype="multipart/form-data">
                 @csrf
-                <input id="customer-import-file" type="file" name="file" accept=".xlsx,.xls,.csv" class="visually-hidden" aria-label="Pilih file pelanggan XLSX atau CSV" aria-describedby="customer-import-help" required>
-                <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <label for="customer-import-file" class="btn btn-outline-secondary mb-0">Pilih file</label>
-                    <span id="customer-import-name" class="small text-muted" aria-live="polite">Belum ada file dipilih</span>
-                    <button id="customer-import-submit" type="submit" class="btn btn-outline-info" disabled>Import</button>
-                </div>
-                <div id="customer-import-help" class="form-text">XLSX, XLS, atau CSV. Tinjau file sebelum menekan Import.</div>
+                <input type="file" name="file" accept=".xlsx,.xls,.csv" class="form-control form-control-sm" onchange="this.form.submit()" aria-label="Import XLSX atau CSV">
             </form>
         @endif
         @if(in_array($billingUser?->role,['super_admin','admin','operator'],true))
@@ -23,21 +17,6 @@
         @endif
     </div>
 </div>
-@if(in_array($billingUser?->role,['super_admin','admin'],true))
-<script>
-(() => {
-    const input = document.getElementById('customer-import-file');
-    const filename = document.getElementById('customer-import-name');
-    const submit = document.getElementById('customer-import-submit');
-    if (!input || !filename || !submit) return;
-    input.addEventListener('change', () => {
-        const file = input.files?.[0];
-        filename.textContent = file ? file.name : 'Belum ada file dipilih';
-        submit.disabled = !file;
-    });
-})();
-</script>
-@endif
 <form class="row g-2 mb-3" method="GET" action="{{route('customers.index')}}">
     <div class="col-lg-4 col-md-6"><input name="search" type="search" maxlength="120" class="form-control" placeholder="Nama / ID / username / WhatsApp" value="{{request('search')}}" aria-label="Cari pelanggan"></div>
     <div class="col-lg-2 col-md-3"><select name="service_type" class="form-select" aria-label="Jenis layanan"><option value="">Semua layanan</option><option value="pppoe" @selected(request('service_type')==='pppoe')>PPPoE</option><option value="hotspot" @selected(request('service_type')==='hotspot')>Hotspot</option></select></div>
@@ -54,8 +33,8 @@
     <span class="text-muted">↓ download / ↑ upload saat ini, diperbarui tiap 30 detik untuk pelanggan PPPoE dan Hotspot yang online.</span>
 </div>
 <div class="table-responsive shadow-sm">
-    <table class="table table-sm table-hover mb-0 align-middle">
-        <thead class="text-center"><tr><th class="text-nowrap text-center">ID</th><th>Nama</th><th class="text-nowrap text-center">WhatsApp</th><th>Paket</th><th>Layanan</th><th>Router</th><th class="text-nowrap">Status</th><th class="text-nowrap">Tagihan {{ $billingPeriod }}</th><th class="text-nowrap">MikroTik</th><th class="text-nowrap">Trafik</th><th></th></tr></thead>
+    <table class="table table-sm table-hover mb-0">
+        <thead><tr><th>ID</th><th>Nama</th><th>WhatsApp</th><th>Paket</th><th>Layanan</th><th>Router</th><th>Status layanan</th><th>Tagihan {{ $billingPeriod }}</th><th>Koneksi MikroTik</th><th>Trafik saat ini <span class="small text-muted">↓ / ↑</span></th><th></th></tr></thead>
         <tbody>
         @forelse($customers as $c)
             @php
@@ -84,13 +63,13 @@
                 $username = $c->service_type === 'pppoe' ? $c->pppoe_username : $c->hotspot_username;
             @endphp
             <tr>
-                <td class="text-nowrap text-center">{{$c->customer_code}}</td>
+                <td>{{$c->customer_code}}</td>
                 <td>{{$c->name}}</td>
-                <td class="text-nowrap text-center">{{$c->whatsapp_number?:$c->phone}}</td>
+                <td>{{$c->whatsapp_number?:$c->phone}}</td>
                 <td>{{$c->package?->name}}</td>
                 <td><span class="badge text-bg-secondary">{{strtoupper($c->service_type)}}</span><div class="small text-muted">{{$username?:'Username belum diatur'}}</div></td>
                 <td>{{$c->router?->name??'—'}}</td>
-                <td class="text-nowrap text-center"><span class="badge text-bg-{{$serviceStatus[1]}}">{{$serviceStatus[0]}}</span></td>
+                <td><span class="badge text-bg-{{$serviceStatus[1]}}">{{$serviceStatus[0]}}</span></td>
                 <td>
                     <span class="badge rounded-pill" style="{{$billingStatus[1]}}">{{$billingStatus[0]}}</span>
                     @if($currentInvoice)<div class="small text-muted mt-1">Jatuh tempo {{$currentInvoice->due_date?->format('d-m-Y')}}</div>@endif
@@ -99,7 +78,17 @@
                     <span class="badge rounded-pill" style="{{$connectionStatus[1]}}">{{$connectionStatus[0]}}</span>
                     @if($c->live_connection_status==='unknown')<div class="small text-muted mt-1">Router tidak dapat dibaca</div>@endif
                 </td>
-                <td>@if(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='online')<span class="badge rounded-pill bg-secondary-subtle text-light border border-secondary-subtle" data-customer-traffic-id="{{$c->id}}" aria-label="Menunggu sampel trafik">Mengukur…</span>@elseif(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='offline')<span class="small text-muted">Offline</span>@elseif(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='unknown')<span class="small text-muted">Tidak diketahui</span>@else<span class="small text-muted">—</span>@endif</td>
+                <td>
+                    @if(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='online')
+                        <span class="badge rounded-pill bg-secondary-subtle text-light border border-secondary-subtle" data-customer-traffic-id="{{$c->id}}" aria-label="Menunggu sampel trafik">Mengukur…</span>
+                    @elseif(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='offline')
+                        <span class="small text-muted">Offline</span>
+                    @elseif(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='unknown')
+                        <span class="small text-muted">Tidak diketahui</span>
+                    @else
+                        <span class="small text-muted">—</span>
+                    @endif
+                </td>
                 <td>@if(in_array($billingUser?->role,['super_admin','admin','operator'],true))<a href="{{route('customers.edit',$c)}}" class="btn btn-sm btn-outline-secondary">Edit</a>@endif</td>
             </tr>
         @empty
@@ -108,12 +97,14 @@
         </tbody>
     </table>
 </div>
-<div class="mt-3">{{$customers->links()}}</div>@if($customers->getCollection()->contains(fn ($customer) => in_array($customer->service_type,['pppoe','hotspot'],true) && $customer->live_connection_status==='online'))
+<div class="mt-3">{{$customers->links()}}</div>
+@if($customers->getCollection()->contains(fn ($customer) => in_array($customer->service_type,['pppoe','hotspot'],true) && $customer->live_connection_status==='online'))
 <script>
 (() => {
     const endpoint = @json(route('customers.traffic'));
     const nodes = [...document.querySelectorAll('[data-customer-traffic-id]')];
     if (!nodes.length) return;
+
     const formatRate = (bps) => {
         if (!Number.isFinite(Number(bps)) || Number(bps) < 0) return '—';
         const value = Number(bps);
@@ -125,27 +116,33 @@
         const labels = {sampling: 'Mengukur…', unavailable: 'Tidak tersedia', unknown: 'Tidak diketahui', offline: 'Offline'};
         node.textContent = labels[state] || 'Tidak tersedia';
         node.title = 'Data laju download/upload PPPoE';
-        node.className = `${state === 'sampling' ? 'bg-secondary-subtle text-light border border-secondary-subtle' : 'bg-dark text-light border border-secondary'} badge rounded-pill`;
+        node.className = `badge rounded-pill ${state === 'sampling' ? 'bg-secondary-subtle text-light border border-secondary-subtle' : 'bg-dark text-light border border-secondary'}`;
     };
     const refresh = async () => {
         try {
-            const response = await fetch(`${endpoint}${window.location.search}`, {headers: {'Accept': 'application/json'}, credentials: 'same-origin', cache: 'no-store'});
+            const response = await fetch(`${endpoint}${window.location.search}`, {
+                headers: {'Accept': 'application/json'},
+                credentials: 'same-origin',
+                cache: 'no-store'
+            });
             if (!response.ok) throw new Error('Traffic sample unavailable');
             const payload = await response.json();
             for (const node of nodes) {
                 const sample = payload.customers?.[node.dataset.customerTrafficId];
-                if (!sample || sample.state !== 'online') { setState(node, sample?.state || 'unknown'); continue; }
+                if (!sample) { setState(node, 'unknown'); continue; }
+                if (sample.state !== 'online') { setState(node, sample.state); continue; }
                 node.textContent = `↓${formatRate(sample.download_bps)} / ↑${formatRate(sample.upload_bps)}`;
                 node.title = 'Download / upload saat ini; diperbarui tiap 30 detik';
                 node.className = 'badge rounded-pill bg-success-subtle text-light border border-success-subtle';
             }
-        } catch (_) { for (const node of nodes) setState(node, 'unknown'); }
+        } catch (_) {
+            for (const node of nodes) setState(node, 'unknown');
+        }
     };
     refresh();
     window.setInterval(refresh, 30_000);
 })();
 </script>
 @endif
-
 @endsection
 
