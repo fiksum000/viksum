@@ -9,7 +9,13 @@
         @if(in_array($billingUser?->role,['super_admin','admin'],true))
             <form method="POST" action="{{route('customers.import')}}" enctype="multipart/form-data">
                 @csrf
-                <input type="file" name="file" accept=".xlsx,.xls,.csv" class="form-control form-control-sm" onchange="this.form.submit()" aria-label="Import XLSX atau CSV">
+                <input id="customer-import-file" type="file" name="file" accept=".xlsx,.xls,.csv" class="visually-hidden" aria-label="Pilih file pelanggan XLSX atau CSV" aria-describedby="customer-import-help" required>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    <label for="customer-import-file" class="btn btn-outline-secondary mb-0">Pilih file</label>
+                    <span id="customer-import-name" class="small text-muted" aria-live="polite">Belum ada file dipilih</span>
+                    <button id="customer-import-submit" type="submit" class="btn btn-outline-info" disabled>Import</button>
+                </div>
+                <div id="customer-import-help" class="form-text">XLSX, XLS, atau CSV. Tinjau file sebelum menekan Import.</div>
             </form>
         @endif
         @if(in_array($billingUser?->role,['super_admin','admin','operator'],true))
@@ -17,6 +23,21 @@
         @endif
     </div>
 </div>
+@if(in_array($billingUser?->role,['super_admin','admin'],true))
+<script>
+(() => {
+    const input = document.getElementById('customer-import-file');
+    const filename = document.getElementById('customer-import-name');
+    const submit = document.getElementById('customer-import-submit');
+    if (!input || !filename || !submit) return;
+    input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        filename.textContent = file ? file.name : 'Belum ada file dipilih';
+        submit.disabled = !file;
+    });
+})();
+</script>
+@endif
 <form class="row g-2 mb-3" method="GET" action="{{route('customers.index')}}">
     <div class="col-lg-4 col-md-6"><input name="search" type="search" maxlength="120" class="form-control" placeholder="Nama / ID / username / WhatsApp" value="{{request('search')}}" aria-label="Cari pelanggan"></div>
     <div class="col-lg-2 col-md-3"><select name="service_type" class="form-select" aria-label="Jenis layanan"><option value="">Semua layanan</option><option value="pppoe" @selected(request('service_type')==='pppoe')>PPPoE</option><option value="hotspot" @selected(request('service_type')==='hotspot')>Hotspot</option></select></div>
@@ -127,3 +148,4 @@
 @endif
 
 @endsection
+
