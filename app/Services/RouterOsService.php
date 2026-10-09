@@ -121,7 +121,7 @@ class RouterOsService {
           $out[$username]['download_bps'] = max(0, (int) $tx);
           $out[$username]['upload_bps'] = max(0, (int) $rx);
         }
-      } catch (\\Throwable) {
+      } catch (\Throwable) {
         // Keep the active session visible; a per-interface read failure is not offline.
       }
     }
