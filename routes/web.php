@@ -1,4 +1,5 @@
 <?php
+
 use App\Http\Controllers\{AuthController, BroadcastController, CustomerController, CustomerImportExportController, CustomerPortalController, CustomerTrafficController, DashboardController, DashboardTrafficController, HotspotController, InvoiceArchiveController, InvoiceController, InvoiceNotificationController, InvoicePdfController, PackageController, PaymentController, PublicPaymentController, PublicRegistrationController, ReportsController, RouterController, RouterReadController, UserController, WaTemplateController};
 use App\Http\Controllers\{OltController, OnuController, PaymentSettingsController};
 use Illuminate\Support\Facades\Route;
@@ -48,8 +49,6 @@ Route::middleware('auth.session')->group(function (): void {
         Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
         Route::get('/whatsapp', [WaTemplateController::class, 'index'])->name('whatsapp.index');
-        Route::post('/whatsapp/company-logo', [WaTemplateController::class, 'uploadCompanyLogo'])->name('whatsapp.company-logo.upload');
-        Route::delete('/whatsapp/company-logo', [WaTemplateController::class, 'deleteCompanyLogo'])->name('whatsapp.company-logo.delete');
         Route::put('/whatsapp/connection', [WaTemplateController::class, 'updateConnection'])->name('whatsapp.connection.update');
         Route::post('/whatsapp/connection/check', [WaTemplateController::class, 'checkConnection'])->middleware('throttle:5,1')->name('whatsapp.connection.check');
         Route::delete('/whatsapp/connection', [WaTemplateController::class, 'deleteConnection'])->name('whatsapp.connection.delete');
