@@ -20,7 +20,7 @@ class CustomerTrafficTest extends TestCase
         $router = $this->router();
         $customer = $this->customer($router, 'pppoe-one');
         $routerOs = Mockery::mock(RouterOsService::class);
-        $routerOs->shouldReceive('activePppTrafficMap')->once()->with($router, ['pppoe-one'])->andReturn(
+        $routerOs->shouldReceive('activePppTrafficMap')->once()->andReturn(
             ['pppoe-one' => ['session_id' => 'session-1', 'caller_id' => 'AA:BB', 'address' => '192.0.2.20', 'download_bps' => 1_250_000, 'upload_bps' => 500_000]],
         );
         $this->app->instance(RouterOsService::class, $routerOs);
@@ -38,7 +38,7 @@ class CustomerTrafficTest extends TestCase
         $router = $this->router();
         $customer = $this->customer($router, 'pppoe-offline');
         $routerOs = Mockery::mock(RouterOsService::class);
-        $routerOs->shouldReceive('activePppTrafficMap')->once()->with($router, ['pppoe-offline'])->andReturn([]);
+        $routerOs->shouldReceive('activePppTrafficMap')->once()->andReturn([]);
         $this->app->instance(RouterOsService::class, $routerOs);
         $this->loginAdmin();
 
@@ -53,7 +53,7 @@ class CustomerTrafficTest extends TestCase
         $router = $this->router();
         $customer = $this->customer($router, 'pppoe-rate-unavailable');
         $routerOs = Mockery::mock(RouterOsService::class);
-        $routerOs->shouldReceive('activePppTrafficMap')->once()->with($router, ['pppoe-rate-unavailable'])->andReturn(
+        $routerOs->shouldReceive('activePppTrafficMap')->once()->andReturn(
             ['pppoe-rate-unavailable' => ['session_id' => 'session-1', 'caller_id' => 'AA:BB', 'address' => '192.0.2.21', 'download_bps' => null, 'upload_bps' => null]],
         );
         $this->app->instance(RouterOsService::class, $routerOs);
