@@ -13,6 +13,7 @@ class PppTrafficRateTest extends TestCase
             ['sampled_at' => 100, 'download_bytes' => 1000, 'upload_bytes' => 500],
             ['sampled_at' => 130, 'download_bytes' => 3_751_000, 'upload_bytes' => 1_875_500],
         );
+
         self::assertSame(['download_bps' => 1_000_000, 'upload_bps' => 500_000], $rate);
     }
 
@@ -24,3 +25,4 @@ class PppTrafficRateTest extends TestCase
         self::assertNull(PppTrafficRate::fromSamples($previous, ['sampled_at' => 130, 'download_bytes' => 900, 'upload_bytes' => 1000]));
     }
 }
+
