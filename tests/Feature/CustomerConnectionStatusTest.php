@@ -48,6 +48,8 @@ class CustomerConnectionStatusTest extends TestCase
             ->assertSee('Aktif di billing')
             ->assertSee('Online')
             ->assertSee('Offline')
+            ->assertSee('Trafik saat ini')
+            ->assertSee('Mengukur…')
             ->assertSee('Lunas')
             ->assertSee('Masa tagihan')
             ->assertSee('Isolir');
@@ -115,3 +117,4 @@ class CustomerConnectionStatusTest extends TestCase
         $this->withSession(['user_id' => $user->id]);
     }
 }
+
