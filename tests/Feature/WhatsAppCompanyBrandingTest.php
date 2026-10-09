@@ -55,6 +55,7 @@ class WhatsAppCompanyBrandingTest extends TestCase
     {
         Storage::fake('public');
         config(['filesystems.disks.public.url' => 'https://billing.example.test/storage']);
+        Storage::forgetDisk('public');
         Storage::disk('public')->put('company-logos/logo.png', 'fake image');
         IntegrationSetting::query()->create([
             'fonnte_enabled' => true,
