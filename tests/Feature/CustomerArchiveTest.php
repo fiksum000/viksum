@@ -1,12 +1,12 @@
 <?php
 
-namespace Tests\Feature;
+namespace Tests\\Feature;
 
-use App\Models\Customer;
-use App\Models\Invoice;
-use App\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Tests\TestCase;
+use App\\Models\\Customer;
+use App\\Models\\Invoice;
+use App\\Models\\User;
+use Illuminate\\Foundation\\Testing\\RefreshDatabase;
+use Tests\\TestCase;
 
 class CustomerArchiveTest extends TestCase
 {
@@ -51,7 +51,7 @@ class CustomerArchiveTest extends TestCase
         $this->assertNull(Customer::query()->find($customer->id));
     }
 
-    public function test_operator_cannot_archive_customers(): void
+    public function test_operator_can_archive_customers(): void
     {
         $customer = Customer::query()->create([
             'customer_code' => '728828002',
@@ -69,8 +69,9 @@ class CustomerArchiveTest extends TestCase
 
         $this->withSession(['user_id' => $operator->id])
             ->delete(route('customers.destroy', $customer))
-            ->assertForbidden();
+            ->assertRedirect(route('customers.index'))
+            ->assertSessionHas('success');
 
-        $this->assertNotSoftDeleted('customers', ['id' => $customer->id]);
+        $this->assertSoftDeleted('customers', ['id' => $customer->id]);
     }
 }
