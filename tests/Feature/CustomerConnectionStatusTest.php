@@ -132,8 +132,8 @@ class CustomerConnectionStatusTest extends TestCase
         $routerOs = Mockery::mock(RouterOsService::class);
         $routerOs->shouldReceive('findPppSecret')->once()->withArgs(fn ($r, $username) => $r->id === $router->id && $username === 'ppp-terminate')
             ->andReturn([['.id' => '*1', 'name' => 'ppp-terminate', 'service' => 'pppoe', 'profile' => 'ISOLIR']]);
-        $routerOs->shouldReceive('enablePppSecret')->once()->with($router, 'ppp-terminate', false);
-        $routerOs->shouldReceive('disconnectPppActive')->once()->with($router, 'ppp-terminate');
+        $routerOs->shouldReceive('enablePppSecret')->once()->withArgs(fn ($r, $username, $enabled) => $r->id === $router->id && $username === 'ppp-terminate' && $enabled === false);
+        $routerOs->shouldReceive('disconnectPppActive')->once()->withArgs(fn ($r, $username) => $r->id === $router->id && $username === 'ppp-terminate');
         $this->app->instance(RouterOsService::class, $routerOs);
         $this->loginAdmin();
 
