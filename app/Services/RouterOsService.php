@@ -299,7 +299,7 @@ class RouterOsService {
    * Push the application-managed profile and its optional FUP profile to RouterOS.
    * MikroTik rate-limit order is upload (RX) / download (TX).
    */
-  public function syncHotspotProfile(HotspotProfile $profile): void
+  public function syncHotspotProfile(HotspotProfile $profile): bool
   {
     $router = $profile->router;
     if (! $router || ! $router->enabled) {
@@ -307,26 +307,27 @@ class RouterOsService {
     }
 
     $client = $this->client($router);
+    $normalName = $profile->routerProfileName();
+    $fupName = $normalName.'-FUP';
     $onLogin = $this->managedHotspotOnLoginScript($profile->bind_mac);
-    $this->upsertHotspotRouterProfile(
+    $changed = $this->upsertHotspotRouterProfile(
       $client,
-      $profile->routerProfileName(),
+      $normalName,
       $profile->upload_speed.'/'.$profile->download_speed,
       $profile->shared_users,
       $onLogin,
     );
 
-    $fupName = $profile->routerProfileName().'-FUP';
     if ($profile->fup_limit_bytes > 0 && filled($profile->fup_upload_speed) && filled($profile->fup_download_speed)) {
-      $this->upsertHotspotRouterProfile(
+      $changed = $this->upsertHotspotRouterProfile(
         $client,
         $fupName,
         $profile->fup_upload_speed.'/'.$profile->fup_download_speed,
         $profile->shared_users,
         $onLogin,
-      );
+      ) || $changed;
     } else {
-      // If FUP was removed in billing, restore all users assigned to the managed
+      // If FUP was removed in billing, restore only users assigned to the managed
       // FUP profile before removing it from the router.
       $users = $client->query('/ip/hotspot/user/print')->read();
       foreach ($users as $user) {
@@ -340,12 +341,12 @@ class RouterOsService {
         }
         $client->query((new Query('/ip/hotspot/user/set'))
           ->equal('.id', $id)
-          ->equal('profile', $profile->routerProfileName()))->read();
-        $this->disconnectHotspotActive($router, $username);
+          ->equal('profile', $normalName))->read();
         HotspotVoucher::query()
           ->where('router_id', $router->id)
           ->where('username', $username)
           ->update(['fup_applied' => false]);
+        $changed = true;
       }
 
       $remainingUsers = $client->query('/ip/hotspot/user/print')->read();
@@ -356,9 +357,31 @@ class RouterOsService {
       foreach ($routerProfiles as $row) {
         if (($row['name'] ?? null) === $fupName && isset($row['.id'])) {
           $client->query((new Query('/ip/hotspot/user/profile/remove'))->equal('.id', $row['.id']))->read();
+          $changed = true;
         }
       }
     }
+
+    if ($changed) {
+      // RouterOS creates dynamic queues on login; reconnect only sessions whose
+      // account currently uses this billing profile so new limits take effect.
+      $managedUsers = collect($client->query('/ip/hotspot/user/print')->read())
+        ->filter(fn (array $user) => in_array($user['profile'] ?? null, [$normalName, $fupName], true))
+        ->pluck('name')
+        ->filter(fn ($name) => is_string($name) && $name !== '')
+        ->flip();
+      if ($managedUsers->isNotEmpty()) {
+        $active = $client->query('/ip/hotspot/active/print')->read();
+        foreach ($active as $session) {
+          $username = (string) ($session['user'] ?? '');
+          if ($username !== '' && $managedUsers->has($username) && isset($session['.id'])) {
+            $client->query((new Query('/ip/hotspot/active/remove'))->equal('.id', $session['.id']))->read();
+          }
+        }
+      }
+    }
+
+    return $changed;
   }
 
   private function upsertHotspotRouterProfile(
@@ -367,21 +390,27 @@ class RouterOsService {
     string $rateLimit,
     int $sharedUsers,
     string $onLogin,
-  ): void {
+  ): bool {
     $rows = $client->query('/ip/hotspot/user/profile/print')->read();
     $matches = collect($rows)->filter(fn (array $row) => ($row['name'] ?? null) === $name)->values();
     if ($matches->count() > 1) {
       throw new RuntimeException("Profil RouterOS '{$name}' ditemukan lebih dari satu kali; sinkronisasi dihentikan.");
     }
 
-    $query = new Query($matches->isNotEmpty() ? '/ip/hotspot/user/profile/set' : '/ip/hotspot/user/profile/add');
+    $existing = $matches->first();
+    $changed = ! $existing
+      || ($existing['rate-limit'] ?? null) !== $rateLimit
+      || (int) ($existing['shared-users'] ?? 1) !== max(1, $sharedUsers)
+      || ($existing['on-login'] ?? null) !== $onLogin;
+
+    $query = new Query($existing ? '/ip/hotspot/user/profile/set' : '/ip/hotspot/user/profile/add');
     $query->equal('name', $name)
       ->equal('rate-limit', $rateLimit)
       ->equal('shared-users', (string) max(1, $sharedUsers))
       ->equal('on-login', $onLogin);
 
-    if ($matches->isNotEmpty()) {
-      $id = $matches[0]['.id'] ?? null;
+    if ($existing) {
+      $id = $existing['.id'] ?? null;
       if (! $id) {
         throw new RuntimeException("ID profil RouterOS '{$name}' tidak tersedia.");
       }
@@ -393,9 +422,12 @@ class RouterOsService {
     $row = collect($verified)->first(fn (array $item) => ($item['name'] ?? null) === $name);
     if (! $row
       || ($row['rate-limit'] ?? null) !== $rateLimit
-      || (int) ($row['shared-users'] ?? 1) !== max(1, $sharedUsers)) {
+      || (int) ($row['shared-users'] ?? 1) !== max(1, $sharedUsers)
+      || ($row['on-login'] ?? null) !== $onLogin) {
       throw new RuntimeException("Profil RouterOS '{$name}' tidak cocok setelah sinkronisasi.");
     }
+
+    return $changed;
   }
 
   private function managedHotspotOnLoginScript(bool $bindMac): string
