@@ -20,5 +20,9 @@ jobs:
           coverage: none
       - uses: ramsey/composer-install@v3
       - run: php artisan key:generate
+      - name: Validate route registration
+        run: php artisan route:list --except-vendor >/dev/null
+      - name: Compile Blade templates
+        run: php artisan view:cache
       - run: php artisan test
 
