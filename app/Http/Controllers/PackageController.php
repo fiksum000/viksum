@@ -189,7 +189,7 @@ class PackageController extends Controller
                 $oldFup,
             ], fn ($value) => is_string($value) && $value !== '')));
 
-            $targetProfile = $package->fup_enabled && $state?->limited
+            $targetProfile = $package->fup_enabled && $customer->fup_override !== false && $state?->limited
                 ? $package->routerFupProfileName()
                 : $package->routerProfileName();
 
