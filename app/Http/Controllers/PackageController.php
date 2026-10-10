@@ -87,15 +87,28 @@ class PackageController extends Controller
 
         if ($package->sync_status !== 'legacy' && $package->router) {
             try {
-                $routerOs->deleteManagedPppProfile(
-                    $package->router,
-                    $package->routerProfileName(),
-                    'VIKSUM:PACKAGE:'.$package->id.':NORMAL',
-                );
+                $managedNames = [$package->routerProfileName(), $package->routerFupProfileName()];
+                $inUse = collect($routerOs->listPppSecrets($package->router))
+                    ->filter(fn (array $secret) => in_array($secret['profile'] ?? null, $managedNames, true))
+                    ->pluck('profile')
+                    ->unique()
+                    ->values();
+
+                if ($inUse->isNotEmpty()) {
+                    return back()->with('warning', 'Paket belum dihapus karena profil masih digunakan secret MikroTik: '.$inUse->implode(', ').'. Pindahkan atau nonaktifkan akun tersebut terlebih dahulu.');
+                }
+
+                // Remove FUP first so a blocked/in-use FUP profile cannot leave
+                // the package's normal profile missing after a partial delete.
                 $routerOs->deleteManagedPppProfile(
                     $package->router,
                     $package->routerFupProfileName(),
                     'VIKSUM:PACKAGE:'.$package->id.':FUP',
+                );
+                $routerOs->deleteManagedPppProfile(
+                    $package->router,
+                    $package->routerProfileName(),
+                    'VIKSUM:PACKAGE:'.$package->id.':NORMAL',
                 );
             } catch (Throwable $exception) {
                 report($exception);
