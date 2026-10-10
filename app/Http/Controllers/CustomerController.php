@@ -474,9 +474,12 @@ class CustomerController extends Controller
                             throw new RuntimeException('Profil secret PPP tidak cocok dengan profil pelanggan yang dikenal. Periksa akun di MikroTik sebelum menghapus data billing.');
                         }
 
-                        $routerOs->disconnectPppActive($router, $customer->pppoe_username);
                         $routerOs->deletePppSecret($router, $customer->pppoe_username);
                     }
+
+                    // A live PPP session may remain after an operator removes the secret
+                    // manually. Revoke the exact customer username even if no secret exists.
+                    $routerOs->disconnectPppActive($router, $customer->pppoe_username);
                 }
 
                 if ($router->enabled && $customer->service_type === 'hotspot' && filled($customer->hotspot_username)) {
