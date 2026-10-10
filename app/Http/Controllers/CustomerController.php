@@ -326,7 +326,7 @@ class CustomerController extends Controller
 
             return redirect()->route('customers.show', $customer)
                 ->with('success', 'Layanan dihentikan. Riwayat tagihan dan pembayaran tetap tersimpan.');
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             Log::warning('Customer termination failed', [
                 'customer_id' => $customer->id,
                 'router_id' => $customer->router_id,
