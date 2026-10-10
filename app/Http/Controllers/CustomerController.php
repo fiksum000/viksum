@@ -1,7 +1,7 @@
 <?php
 namespace App\Http\Controllers;
 
-use App\Models\{Customer, FupState, HotspotProfile, Onu, Package, Router};
+use App\Models\{Customer, FupState, HotspotProfile, HotspotVoucher, Onu, Package, Router};
 use App\Services\FupService;
 use App\Services\IsolationService;
 use App\Services\RouterOsService;
@@ -241,6 +241,129 @@ class CustomerController extends Controller
 
             return redirect()->route('customers.show', $customer)
                 ->with('warning', 'Isolir belum dapat dibuka. Periksa koneksi router dan log aplikasi.');
+        }
+    }
+
+    public function syncToRouter(Customer $customer, RouterOsService $routerOs)
+    {
+        if (! in_array($customer->status, ['active', 'isolated', 'suspended'], true)) {
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Sinkronisasi hanya tersedia untuk layanan aktif, isolir, atau ditangguhkan.');
+        }
+
+        try {
+            $router = $customer->router;
+            if (! $router || ! $router->enabled) {
+                throw new RuntimeException('Router tidak tersedia.');
+            }
+
+            if ($customer->service_type === 'pppoe') {
+                $username = trim((string) $customer->pppoe_username);
+                if ($username === '') {
+                    throw new RuntimeException('Username PPP belum diatur.');
+                }
+
+                $duplicateBillingIdentity = Customer::query()
+                    ->where('router_id', $customer->router_id)
+                    ->where('service_type', 'pppoe')
+                    ->where('pppoe_username', $username)
+                    ->where('id', '!=', $customer->id)
+                    ->exists();
+                if ($duplicateBillingIdentity) {
+                    throw new RuntimeException('Username PPP digunakan oleh pelanggan lain di billing.');
+                }
+
+                $matches = collect($routerOs->findPppSecret($router, $username))
+                    ->filter(fn (array $row) => ($row['name'] ?? null) === $username)
+                    ->values();
+                if ($matches->count() > 1) {
+                    throw new RuntimeException('Username PPP tidak unik di router.');
+                }
+
+                $previousUsername = null;
+                if ($matches->isNotEmpty()) {
+                    $secret = $matches->first();
+                    if (isset($secret['service']) && $secret['service'] !== 'pppoe') {
+                        throw new RuntimeException('Akun router tidak cocok dengan jenis layanan PPPoE.');
+                    }
+
+                    $allowedProfiles = array_filter([
+                        $customer->package?->normal_profile,
+                        $customer->package?->fup_speed_after,
+                        $customer->pppoe_profile_normal,
+                        $customer->pppoe_profile_isolir,
+                        $customer->fup_speed_after,
+                        config('billing.isolation_profile'),
+                    ]);
+                    if (! in_array((string) ($secret['profile'] ?? ''), $allowedProfiles, true)) {
+                        throw new RuntimeException('Profil akun router tidak cocok dengan profil pelanggan.');
+                    }
+
+                    // Existing PPP secrets have no billing ownership marker. Only update
+                    // an existing row after its service type and profile are verified.
+                    $previousUsername = $username;
+                }
+
+                $this->syncPppSecret($customer, $routerOs, $previousUsername);
+            } elseif ($customer->service_type === 'hotspot') {
+                $username = trim((string) $customer->hotspot_username);
+                if ($username === '' || ! $customer->hotspot_profile_id) {
+                    throw new RuntimeException('Username dan profil Hotspot terkelola harus tersedia untuk sinkronisasi.');
+                }
+
+                $duplicateCustomer = Customer::query()
+                    ->where('router_id', $customer->router_id)
+                    ->where('service_type', 'hotspot')
+                    ->where('hotspot_username', $username)
+                    ->where('id', '!=', $customer->id)
+                    ->exists();
+                $duplicateVoucher = HotspotVoucher::query()
+                    ->where('router_id', $customer->router_id)
+                    ->where('username', $username)
+                    ->exists();
+                if ($duplicateCustomer || $duplicateVoucher) {
+                    throw new RuntimeException('Username Hotspot digunakan oleh pelanggan atau voucher lain.');
+                }
+
+                $matches = collect($routerOs->listHotspotUsers($router))
+                    ->filter(fn (array $row) => ($row['name'] ?? null) === $username)
+                    ->values();
+                if ($matches->count() > 1) {
+                    throw new RuntimeException('Username Hotspot tidak unik di router.');
+                }
+
+                $previousUsername = null;
+                if ($matches->isNotEmpty()) {
+                    $expectedComment = 'Billing customer '.$customer->customer_code;
+                    if ((string) ($matches->first()['comment'] ?? '') !== $expectedComment) {
+                        throw new RuntimeException('Penanda kepemilikan akun Hotspot tidak cocok.');
+                    }
+                    $previousUsername = $username;
+                }
+
+                $this->syncHotspotUser($customer, $routerOs, $previousUsername);
+            } else {
+                throw new RuntimeException('Jenis layanan pelanggan tidak didukung untuk sinkronisasi.');
+            }
+
+            Audit::log('customer.router_sync', Customer::class, $customer->id, [
+                'router_id' => $customer->router_id,
+                'service_type' => $customer->service_type,
+                'status' => $customer->status,
+            ]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('success', 'Akun pelanggan berhasil disinkronkan ke MikroTik.');
+        } catch (\Throwable $exception) {
+            Log::warning('Customer RouterOS resynchronization failed', [
+                'customer_id' => $customer->id,
+                'router_id' => $customer->router_id,
+                'service_type' => $customer->service_type,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Sinkronisasi belum berhasil. Periksa koneksi router, data layanan, dan log aplikasi.');
         }
     }
 
