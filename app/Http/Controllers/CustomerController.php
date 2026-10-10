@@ -26,7 +26,7 @@ class CustomerController extends Controller
             'service_type' => ['nullable', 'in:pppoe,hotspot'],
             'package_id' => ['nullable', 'integer', 'exists:packages,id'],
         ]);
-        $q = $customerQuery->filtered($filters)->paginate(25)->withQueryString();
+        $q = $customerQuery->filtered($filters)->withExists('invoices')->paginate(25)->withQueryString();
         $period = now(config('billing.timezone'))->format('Y-m');
         $customers = $q->getCollection();
         $customers->load(['invoices' => fn ($query) => $query->where('period', $period)]);
