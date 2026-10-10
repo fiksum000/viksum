@@ -258,22 +258,29 @@
             <button class="btn btn-primary mt-3" @disabled($generatorProfiles->isEmpty())>Buat voucher</button>
         </form>
     </div>
-    <div class="col-lg-7">
-        <div class="card card-body h-100">
-            <h2 class="h5">Router dan user aktif</h2>
-            <p class="text-secondary small">Sesi aktif dibaca langsung dari router. Jika tidak bisa dibaca, periksa koneksi RouterOS API dan hak akses user API.</p>
-            @forelse($routers as $router)
-                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 border rounded p-2 mb-2">
+</div>
+@endif
+
+<div class="card card-body mb-4">
+    <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-3">
+        <div>
+            <h2 class="h5 mb-1">Router dan user aktif</h2>
+            <p class="text-secondary small mb-0">Sesi aktif dibaca langsung dari MikroTik RouterOS. Halaman ini hanya membaca sesi dan tidak mengubah konfigurasi router.</p>
+        </div>
+    </div>
+    <div class="row g-2">
+        @forelse($routers as $router)
+            <div class="col-12 col-md-6 col-xl-4">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 border rounded p-2 h-100">
                     <span>{{ $router->name }}</span>
                     <a class="btn btn-sm btn-outline-light" href="{{ route('hotspot.active', $router) }}" target="_blank" rel="noopener">Lihat user aktif</a>
                 </div>
-            @empty
-                <p class="text-secondary mb-0">Belum ada router yang diaktifkan.</p>
-            @endforelse
-        </div>
+            </div>
+        @empty
+            <p class="text-secondary mb-0">Belum ada router yang diaktifkan.</p>
+        @endforelse
     </div>
 </div>
-@endif
 
 @if($canManageVouchers)
 <form id="print-vouchers" method="GET" action="{{ route('hotspot.print') }}"></form>
