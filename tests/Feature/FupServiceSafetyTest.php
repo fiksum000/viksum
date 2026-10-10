@@ -11,6 +11,7 @@ use App\Services\RouterOsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Mockery;
+use RuntimeException;
 use Tests\TestCase;
 
 class FupServiceSafetyTest extends TestCase
@@ -157,6 +158,142 @@ class FupServiceSafetyTest extends TestCase
         $this->assertSame(2000, $state->fresh()->total_bytes);
         $this->assertTrue($state->fresh()->limited);
         $this->assertSame([[$router->id, 'fup-active-user', $package->fup_speed_after]], $profileChanges);
+    }
+
+    public function test_collector_ignores_a_non_pppoe_session_that_has_the_same_username(): void
+    {
+        config(['billing.timezone' => 'Asia/Jakarta']);
+        Carbon::setTestNow(Carbon::parse('2026-10-10 12:00:00', 'Asia/Jakarta'));
+
+        $router = Router::query()->create([
+            'name' => 'Non-PPPoE session router',
+            'host' => '192.0.2.62',
+            'port' => 8728,
+            'username' => 'session-type-test',
+            'password' => 'test-only-password',
+            'enabled' => true,
+        ]);
+        $package = Package::query()->create([
+            'name' => 'Session type FUP package',
+            'price' => 50000,
+            'router_id' => $router->id,
+            'normal_profile' => 'VIKSUM-PPP-79',
+            'fup_speed_after' => 'VIKSUM-PPP-79-FUP',
+            'fup_enabled' => true,
+            'fup_limit_bytes' => 1000,
+        ]);
+        $customer = Customer::query()->create([
+            'customer_code' => 'FUP-SESSION-TYPE',
+            'name' => 'Session type customer',
+            'service_type' => 'pppoe',
+            'status' => 'active',
+            'due_day' => 20,
+            'router_id' => $router->id,
+            'package_id' => $package->id,
+            'pppoe_username' => 'shared-session-name',
+            'pppoe_profile_normal' => $package->normal_profile,
+            'fup_enabled' => true,
+            'fup_override' => true,
+            'fup_limit_bytes' => 1000,
+            'fup_speed_after' => $package->fup_speed_after,
+        ]);
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('activePppMap')->once()->andReturn([
+            'shared-session-name' => [
+                '.id' => '*non-pppoe-session',
+                'name' => 'shared-session-name',
+                'service' => 'pptp',
+                'bytes-in' => 5000,
+                'bytes-out' => 5000,
+            ],
+        ]);
+        $routerOs->shouldReceive('listPppSecrets')->once()->andReturn([[
+            '.id' => '*secret-session-type',
+            'name' => 'shared-session-name',
+            'profile' => $package->normal_profile,
+        ]]);
+        $routerOs->shouldNotReceive('setPppProfileIfCurrentProfile');
+        $routerOs->shouldNotReceive('setPppProfile');
+        $this->app->instance(RouterOsService::class, $routerOs);
+
+        $this->assertSame(0, app(FupService::class)->collect());
+        $this->assertDatabaseMissing('fup_states', ['customer_id' => $customer->id]);
+    }
+
+    public function test_collector_keeps_fup_state_unlimited_when_router_rejects_an_unknown_profile_transition(): void
+    {
+        config(['billing.timezone' => 'Asia/Jakarta']);
+        Carbon::setTestNow(Carbon::parse('2026-10-10 12:00:00', 'Asia/Jakarta'));
+
+        $router = Router::query()->create([
+            'name' => 'Unknown profile router',
+            'host' => '192.0.2.63',
+            'port' => 8728,
+            'username' => 'unknown-profile-test',
+            'password' => 'test-only-password',
+            'enabled' => true,
+        ]);
+        $package = Package::query()->create([
+            'name' => 'Unknown profile FUP package',
+            'price' => 50000,
+            'router_id' => $router->id,
+            'normal_profile' => 'VIKSUM-PPP-80',
+            'fup_speed_after' => 'VIKSUM-PPP-80-FUP',
+            'fup_enabled' => true,
+            'fup_limit_bytes' => 1000,
+        ]);
+        $customer = Customer::query()->create([
+            'customer_code' => 'FUP-UNKNOWN-PROFILE',
+            'name' => 'Unknown profile customer',
+            'service_type' => 'pppoe',
+            'status' => 'active',
+            'due_day' => 20,
+            'router_id' => $router->id,
+            'package_id' => $package->id,
+            'pppoe_username' => 'unknown-profile-user',
+            'pppoe_profile_normal' => $package->normal_profile,
+            'fup_enabled' => true,
+            'fup_override' => true,
+            'fup_limit_bytes' => 1000,
+            'fup_speed_after' => $package->fup_speed_after,
+        ]);
+        $state = FupState::query()->create([
+            'customer_id' => $customer->id,
+            'period' => app(FupService::class)->currentPeriod(),
+            'last_rx' => 0,
+            'last_tx' => 0,
+            'total_bytes' => 0,
+            'limited' => false,
+            'last_sampled_at' => now()->subMinutes(5),
+            'last_session_id' => '*unknown-profile-session',
+        ]);
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('activePppMap')->once()->andReturn([
+            'unknown-profile-user' => [
+                '.id' => '*unknown-profile-session',
+                'name' => 'unknown-profile-user',
+                'service' => 'pppoe',
+                'bytes-in' => 1200,
+                'bytes-out' => 800,
+            ],
+        ]);
+        $routerOs->shouldReceive('listPppSecrets')->once()->andReturn([[
+            '.id' => '*secret-unknown-profile',
+            'name' => 'unknown-profile-user',
+            'profile' => 'UNRELATED-MANUAL-PROFILE',
+        ]]);
+        $routerOs->shouldReceive('setPppProfileIfCurrentProfile')->once()
+            ->andThrow(new RuntimeException('Unexpected manual PPP profile'));
+        $routerOs->shouldNotReceive('setPppProfile');
+        $routerOs->shouldNotReceive('disconnectPppActive');
+        $this->app->instance(RouterOsService::class, $routerOs);
+
+        app(FupService::class)->collect();
+
+        $this->assertSame(2000, $state->fresh()->total_bytes);
+        $this->assertFalse($state->fresh()->limited);
     }
 
     private function isolatedCustomerWithFupState(string $period): array
