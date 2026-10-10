@@ -263,6 +263,81 @@ class CustomerController extends Controller
         return redirect()->route('customers.edit', $customer)->with($feedbackKey, $message);
     }
 
+    public function terminate(Customer $customer, RouterOsService $routerOs)
+    {
+        if ($customer->status === 'terminated') {
+            return redirect()->route('customers.show', $customer)->with('success', 'Pelanggan sudah berstatus berhenti.');
+        }
+
+        try {
+            $router = $customer->router;
+            $username = $customer->service_type === 'pppoe'
+                ? $customer->pppoe_username
+                : $customer->hotspot_username;
+
+            if (filled($username) && !$router) {
+                throw new RuntimeException('Router pelanggan tidak ditemukan. Status layanan tidak diubah agar kondisi jaringan tidak salah dicatat.');
+            }
+
+            if (filled($username) && $router && !$router->enabled) {
+                throw new RuntimeException('Router pelanggan sedang dinonaktifkan. Aktifkan router terlebih dahulu agar layanan dapat dihentikan dengan aman.');
+            }
+
+            if (filled($username) && $router && $customer->service_type === 'pppoe') {
+                $matches = collect($routerOs->findPppSecret($router, $username))
+                    ->filter(fn (array $row) => ($row['name'] ?? null) === $username)
+                    ->values();
+                if ($matches->count() > 1) {
+                    throw new RuntimeException('Username PPP ditemukan lebih dari satu kali di MikroTik. Status tidak diubah.');
+                }
+                if ($matches->isNotEmpty()) {
+                    $secret = $matches->first();
+                    $package = $customer->package;
+                    $allowedProfiles = array_filter([
+                        $package?->normal_profile,
+                        $package?->fup_speed_after,
+                        $customer->pppoe_profile_normal,
+                        $customer->pppoe_profile_isolir,
+                        $customer->fup_speed_after,
+                        config('billing.isolation_profile'),
+                    ]);
+                    if ((isset($secret['service']) && $secret['service'] !== 'pppoe')
+                        || !in_array((string) ($secret['profile'] ?? ''), $allowedProfiles, true)) {
+                        throw new RuntimeException('Secret PPP tidak cocok dengan profil pelanggan yang dikenal. Periksa MikroTik sebelum menghentikan layanan.');
+                    }
+                    $routerOs->enablePppSecret($router, $username, false);
+                    $routerOs->disconnectPppActive($router, $username);
+                }
+            } elseif (filled($username) && $router && $customer->service_type === 'hotspot') {
+                $routerOs->setManagedHotspotUserEnabled(
+                    $router,
+                    $username,
+                    false,
+                    'Billing customer '.$customer->customer_code,
+                );
+                $routerOs->disconnectHotspotActive($router, $username);
+            }
+
+            $customer->update(['status' => 'terminated']);
+            Audit::log('customer.terminated', Customer::class, $customer->id, [
+                'code' => $customer->customer_code,
+                'service_type' => $customer->service_type,
+            ]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('success', 'Layanan dihentikan. Riwayat tagihan dan pembayaran tetap tersimpan.');
+        } catch (\\Throwable $exception) {
+            Log::warning('Customer termination failed', [
+                'customer_id' => $customer->id,
+                'router_id' => $customer->router_id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Layanan belum dihentikan: '.$exception->getMessage());
+        }
+    }
+
     public function destroy(Customer $customer, RouterOsService $routerOs)
     {
         // Financial history is immutable: use the terminated status for former customers.
