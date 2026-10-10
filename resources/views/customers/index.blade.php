@@ -102,6 +102,7 @@
                 <td>@if(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='online')<span class="badge rounded-pill bg-secondary-subtle text-light border border-secondary-subtle" data-customer-traffic-id="{{$c->id}}" aria-label="Menunggu sampel trafik">Mengukur…</span>@elseif(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='offline')<span class="small text-muted">Offline</span>@elseif(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='unknown')<span class="small text-muted">Tidak diketahui</span>@else<span class="small text-muted">—</span>@endif</td>
                 <td class="text-nowrap text-center">
                     @if(in_array($billingUser?->role,['super_admin','admin','operator'],true))
+                        <a href="{{route('customers.show',$c)}}" class="btn btn-sm btn-outline-primary">Detail</a>
                         <a href="{{route('customers.edit',$c)}}" class="btn btn-sm btn-outline-secondary">Edit</a>
                     @endif
                     @if(in_array($billingUser?->role,['super_admin','admin'],true))
