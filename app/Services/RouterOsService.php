@@ -1,6 +1,7 @@
 <?php
 namespace App\Services;
 use App\Models\Router;
+use App\Models\Package;
 use App\Models\HotspotProfile;
 use App\Models\HotspotVoucher;
 use Illuminate\Support\Facades\Log;
@@ -17,8 +18,78 @@ class RouterOsService {
     return ['interface' => $interface, 'rx_bps' => (int) ($row['rx-bits-per-second'] ?? 0), 'tx_bps' => (int) ($row['tx-bits-per-second'] ?? 0)];
   }
   public function findPppSecret(Router $router,string $username):array{return $this->client($router)->query((new Query('/ppp/secret/print'))->where('name',$username))->read();}
-  private function pppId(Router $r,string $u):string { $rows=$this->findPppSecret($r,$u); $id=$rows[0]['.id']??null; if(!$id) throw new RuntimeException("PPPoE user {$u} tidak ditemukan."); return $id; }
-  public function setPppProfile(Router $router,string $username,string $profile):void{$c=$this->client($router);$c->query((new Query('/ppp/secret/set'))->equal('.id',$this->pppId($router,$username))->equal('profile',$profile))->read();}
+  private function pppId(Router $r, string $u): string
+  {
+    $rows = collect($this->findPppSecret($r, $u))
+      ->filter(fn (array $row) => ($row['name'] ?? null) === $u)
+      ->values();
+    if ($rows->count() !== 1 || ! isset($rows[0]['.id'])) {
+      throw new RuntimeException("PPPoE user '{$u}' tidak ditemukan secara unik di router.");
+    }
+    return (string) $rows[0]['.id'];
+  }
+
+  public function setPppProfile(Router $router, string $username, string $profile): void
+  {
+    $client = $this->client($router);
+    $profiles = $client->query('/ppp/profile/print')->read();
+    if (! collect($profiles)->contains(fn (array $row) => ($row['name'] ?? null) === $profile)) {
+      throw new RuntimeException("Profil PPP '{$profile}' tidak ditemukan di router {$router->name}.");
+    }
+
+    $id = $this->pppId($router, $username);
+    $client->query((new Query('/ppp/secret/set'))->equal('.id', $id)->equal('profile', $profile))->read();
+    $verified = collect($this->findPppSecret($router, $username))
+      ->first(fn (array $row) => ($row['name'] ?? null) === $username);
+    if (! $verified || ($verified['profile'] ?? null) !== $profile) {
+      throw new RuntimeException("Profil PPP '{$profile}' belum terverifikasi untuk user '{$username}'.");
+    }
+  }
+
+  /**
+   * Only change an existing secret if its current profile is one of the package
+   * profiles we expect. This helps protect independently managed PPP accounts.
+   */
+  public function setPppProfileIfCurrentProfile(
+    Router $router,
+    string $username,
+    array $expectedCurrentProfiles,
+    string $targetProfile,
+  ): bool {
+    $client = $this->client($router);
+    $rows = collect($this->findPppSecret($router, $username))
+      ->filter(fn (array $row) => ($row['name'] ?? null) === $username)
+      ->values();
+    if ($rows->count() !== 1 || ! isset($rows[0]['.id'])) {
+      throw new RuntimeException("PPP secret '{$username}' tidak ditemukan secara unik.");
+    }
+
+    $current = (string) ($rows[0]['profile'] ?? '');
+    if (! in_array($current, $expectedCurrentProfiles, true)) {
+      throw new RuntimeException("Profil PPP '{$username}' berubah menjadi '{$current}' di luar pemetaan paket. Akun dilewati demi keamanan.");
+    }
+    if ($current === $targetProfile) {
+      return false;
+    }
+
+    $profiles = $client->query('/ppp/profile/print')->read();
+    if (! collect($profiles)->contains(fn (array $row) => ($row['name'] ?? null) === $targetProfile)) {
+      throw new RuntimeException("Profil PPP tujuan '{$targetProfile}' tidak ada di router.");
+    }
+
+    $client->query((new Query('/ppp/secret/set'))
+      ->equal('.id', $rows[0]['.id'])
+      ->equal('profile', $targetProfile))->read();
+    $verified = collect($this->findPppSecret($router, $username))
+      ->first(fn (array $row) => ($row['name'] ?? null) === $username);
+    if (! $verified || ($verified['profile'] ?? null) !== $targetProfile) {
+      throw new RuntimeException("Profil PPP '{$targetProfile}' belum terverifikasi untuk user '{$username}'.");
+    }
+
+    $this->disconnectPppActive($router, $username);
+    return true;
+  }
+
   public function enablePppSecret(Router $router,string $username,bool $enable):void{$c=$this->client($router);$c->query((new Query('/ppp/secret/set'))->equal('.id',$this->pppId($router,$username))->equal('disabled',$enable?'no':'yes'))->read();}
   public function disconnectPppActive(Router $router,string $username):void{$c=$this->client($router);$rows=$c->query((new Query('/ppp/active/print'))->where('name',$username))->read();foreach($rows as $row){if(isset($row['.id']))$c->query((new Query('/ppp/active/remove'))->equal('.id',$row['.id']))->read();}}
   public function activePppMap(Router $router):array{$rows=$this->client($router)->query('/ppp/active/print')->read();$out=[];foreach($rows as $r){$n=$r['name']??null;if($n)$out[$n]=$r;}return $out;}
@@ -63,6 +134,142 @@ class RouterOsService {
   public function deletePppSecret(Router $router,string $username):void{$client=$this->client($router);$rows=$this->findPppSecret($router,$username);foreach($rows as $row){if(isset($row['.id']))$client->query((new Query('/ppp/secret/remove'))->equal('.id',$row['.id']))->read();}}
   public function listPppSecrets(Router $router):array{return $this->client($router)->query('/ppp/secret/print')->read();}
   public function listPppProfiles(Router $router):array{return $this->client($router)->query('/ppp/profile/print')->read();}
+
+  /**
+   * Create/update PPP profiles owned by a billing package.
+   * RouterOS rate-limit uses RX/TX from router perspective (client upload/download).
+   */
+  public function syncPppPackageProfiles(Package $package): bool
+  {
+    $router = $package->router;
+    if (! $router || ! $router->enabled) {
+      throw new RuntimeException('Router paket PPPoE tidak tersedia atau dinonaktifkan.');
+    }
+    if (! $package->exists || $package->normal_profile !== $package->routerProfileName()) {
+      throw new RuntimeException('Nama profil PPP internal billing belum disiapkan; sinkronisasi dihentikan.');
+    }
+
+    $upload = trim((string) $package->upload_speed);
+    $download = trim((string) $package->download_speed);
+    if ($upload === '' || $download === '') {
+      throw new RuntimeException('Kecepatan upload dan download belum diisi pada paket billing.');
+    }
+
+    $rateLimit = $upload.'/'.$download;
+    if ($package->burst_enabled) {
+      $burst = trim((string) $package->burst_limit);
+      $threshold = trim((string) $package->burst_threshold);
+      $burstTime = trim((string) ($package->burst_time ?: '5s'));
+      $ratePattern = '/^\\d+(?:\\.\\d+)?[kKmMgG]?(?:\\/\\d+(?:\\.\\d+)?[kKmMgG]?)?$/';
+      $timePattern = '/^\\d+(?:\\.\\d+)?[smhd](?:\\d+(?:\\.\\d+)?[smhd])*$/i';
+      if ($burst === '' || $threshold === ''
+        || ! preg_match($ratePattern, $burst)
+        || ! preg_match($ratePattern, $threshold)
+        || ! preg_match($timePattern, $burstTime)) {
+        throw new RuntimeException('Format burst tidak valid. Contoh batas 5M/20M, threshold 2M/10M, waktu 5s.');
+      }
+      $rateLimit .= ' '.$burst.' '.$threshold.' '.$burstTime.'/'.$burstTime.' '.(int) $package->priority;
+    }
+
+    $changed = $this->upsertManagedPppProfile(
+      $router,
+      $package->routerProfileName(),
+      $rateLimit,
+      'VIKSUM:PACKAGE:'.$package->id.':NORMAL',
+    );
+
+    if ($package->fup_enabled) {
+      if ((int) $package->fup_limit_bytes <= 0
+        || blank($package->fup_upload_speed)
+        || blank($package->fup_download_speed)) {
+        throw new RuntimeException('FUP aktif tetapi batas GB atau kecepatan upload/download FUP belum lengkap.');
+      }
+
+      $changed = $this->upsertManagedPppProfile(
+        $router,
+        $package->routerFupProfileName(),
+        trim((string) $package->fup_upload_speed).'/'.trim((string) $package->fup_download_speed),
+        'VIKSUM:PACKAGE:'.$package->id.':FUP',
+      ) || $changed;
+    }
+
+    return $changed;
+  }
+
+  private function upsertManagedPppProfile(
+    Router $router,
+    string $name,
+    string $rateLimit,
+    string $ownerComment,
+  ): bool {
+    $client = $this->client($router);
+    $rows = collect($client->query('/ppp/profile/print')->read())
+      ->filter(fn (array $row) => ($row['name'] ?? null) === $name)
+      ->values();
+    if ($rows->count() > 1) {
+      throw new RuntimeException("Profil PPP '{$name}' ditemukan lebih dari sekali; sinkronisasi dibatalkan.");
+    }
+
+    $existing = $rows->first();
+    if ($existing && ($existing['comment'] ?? '') !== $ownerComment) {
+      throw new RuntimeException("Nama profil '{$name}' sudah dipakai profil lain. Billing tidak menimpa profil tersebut.");
+    }
+
+    $changed = ! $existing
+      || ($existing['rate-limit'] ?? '') !== $rateLimit
+      || ($existing['only-one'] ?? 'no') !== 'yes'
+      || ($existing['change-tcp-mss'] ?? '') !== 'yes'
+      || ($existing['comment'] ?? '') !== $ownerComment;
+
+    $query = new Query($existing ? '/ppp/profile/set' : '/ppp/profile/add');
+    $query->equal('name', $name)
+      ->equal('rate-limit', $rateLimit)
+      ->equal('only-one', 'yes')
+      ->equal('change-tcp-mss', 'yes')
+      ->equal('comment', $ownerComment);
+    if ($existing) {
+      if (! isset($existing['.id'])) {
+        throw new RuntimeException("ID profil PPP '{$name}' tidak tersedia.");
+      }
+      $query->equal('.id', $existing['.id']);
+    }
+
+    $client->query($query)->read();
+    $verified = collect($client->query('/ppp/profile/print')->read())
+      ->first(fn (array $row) => ($row['name'] ?? null) === $name);
+    if (! $verified
+      || ($verified['comment'] ?? '') !== $ownerComment
+      || ($verified['rate-limit'] ?? null) !== $rateLimit
+      || ($verified['only-one'] ?? null) !== 'yes') {
+      throw new RuntimeException("Profil PPP '{$name}' tidak cocok setelah sinkronisasi.");
+    }
+
+    return $changed;
+  }
+
+  public function deleteManagedPppProfile(Router $router, string $name, string $expectedComment): bool
+  {
+    $client = $this->client($router);
+    $profiles = collect($client->query('/ppp/profile/print')->read())
+      ->filter(fn (array $row) => ($row['name'] ?? null) === $name)
+      ->values();
+    if ($profiles->isEmpty()) {
+      return false;
+    }
+    if ($profiles->count() !== 1 || ! isset($profiles[0]['.id'])
+      || ($profiles[0]['comment'] ?? '') !== $expectedComment) {
+      throw new RuntimeException("Profil PPP '{$name}' bukan profil milik paket billing; profil tidak dihapus.");
+    }
+
+    $secrets = $client->query('/ppp/secret/print')->read();
+    if (collect($secrets)->contains(fn (array $row) => ($row['profile'] ?? null) === $name)) {
+      throw new RuntimeException("Profil PPP '{$name}' masih digunakan secret pada router.");
+    }
+
+    $client->query((new Query('/ppp/profile/remove'))->equal('.id', $profiles[0]['.id']))->read();
+    return true;
+  }
+
   public function listHotspotUsers(Router $router): array
   {
     return $this->client($router)->query('/ip/hotspot/user/print')->read();
