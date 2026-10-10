@@ -26,6 +26,27 @@ class PaymentSettingsController
         ]);
     }
 
+    public function checkTripay(TripayService $tripay)
+    {
+        try {
+            $channels = $tripay->checkConnection();
+            $count = count($channels);
+            return back()->with('tripay_check', [
+                'ok' => true,
+                'count' => $count,
+                'message' => $count > 0
+                    ? "Koneksi Tripay berhasil. {$count} kanal pembayaran aktif ditemukan."
+                    : 'Koneksi berhasil, tetapi belum ada kanal pembayaran aktif.',
+            ]);
+        } catch (\Throwable $exception) {
+            report($exception);
+            return back()->with('tripay_check', [
+                'ok' => false,
+                'count' => null,
+                'message' => 'Tes koneksi belum berhasil. Periksa pengaturan koneksi dan coba lagi.',
+            ]);
+        }
+    }
     public function update(Request $request)
     {
         $settings = PaymentSetting::query()->first() ?? new PaymentSetting();
