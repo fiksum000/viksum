@@ -187,7 +187,7 @@ class PackageController extends Controller
                 ->first();
 
             if ($customer->status !== 'active' || !$customer->router || !$customer->pppoe_username) {
-                if (!$package->fup_enabled && $state?->limited) {
+                if ((!$package->fup_enabled || $customer->fup_override === false) && $state?->limited) {
                     $state->update(['limited' => false]);
                 }
                 continue;
@@ -228,7 +228,7 @@ class PackageController extends Controller
                         'total_bytes' => $state->total_bytes,
                         'profile_before' => $package->legacy_fup_profile ?: $oldFup,
                         'profile_after' => $package->routerProfileName(),
-                        'details' => 'FUP dimatikan pada paket; profil normal billing dipulihkan',
+                        'details' => 'FUP dimatikan untuk paket/pelanggan; profil normal billing dipulihkan',
                         'created_at' => now(),
                         'updated_at' => now(),
                     ]);
