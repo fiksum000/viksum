@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\HotspotProfile;
 use App\Models\HotspotVoucher;
 use App\Models\Router;
 use App\Models\User;
