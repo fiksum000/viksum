@@ -30,6 +30,7 @@ class FupService
     {
         $count = 0;
         $period = $this->currentPeriod();
+        $activeMaps = [];
 
         // Recover a previous month's limited sessions as soon as the collection worker
         // runs after rollover, rather than depending only on the separate reset schedule.
@@ -48,21 +49,26 @@ class FupService
                             ->whereHas('package', fn ($package) => $package->where('fup_enabled', true));
                     });
             })
-            ->chunkById(50, function ($customers) use ($period, &$count): void {
+            ->chunkById(50, function ($customers) use ($period, &$count, &$activeMaps): void {
                 $byRouter = [];
                 foreach ($customers as $customer) {
                     $byRouter[$customer->router_id]['router'] = $customer->router;
                     $byRouter[$customer->router_id]['customers'][] = $customer;
                 }
 
-                foreach ($byRouter as $bundle) {
+                foreach ($byRouter as $routerId => $bundle) {
                     $router = $bundle['router'];
                     if (!$router || !$router->enabled) {
                         continue;
                     }
 
                     try {
-                        $activeMap = $this->routerOs->activePppMap($router);
+                        // Fetch the active PPP table once per router per collection run,
+                        // even when many subscribers span multiple database chunks.
+                        if (!array_key_exists($routerId, $activeMaps)) {
+                            $activeMaps[$routerId] = $this->routerOs->activePppMap($router);
+                        }
+                        $activeMap = $activeMaps[$routerId];
                     } catch (Throwable $exception) {
                         report($exception);
                         continue;
