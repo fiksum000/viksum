@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Customer;
 use App\Models\HotspotVoucher;
 use App\Models\Router;
 use App\Models\User;
@@ -65,6 +66,37 @@ class RoleAccessTest extends TestCase
 
         $this->withSession(['user_id' => $technician->id])
             ->post(route('hotspot.generate'), ['router_id' => $router->id])
+            ->assertForbidden();
+    }
+
+    public function test_technician_can_open_customer_detail_but_cannot_edit_or_delete(): void
+    {
+        $technician = $this->user('technician');
+        $customer = Customer::query()->create([
+            'customer_code' => 'TECH-CUSTOMER-001',
+            'name' => 'Technician detail customer',
+            'service_type' => 'pppoe',
+            'status' => 'active',
+            'due_day' => 20,
+        ]);
+
+        $list = $this->withSession(['user_id' => $technician->id])
+            ->get(route('customers.index'))
+            ->assertOk()
+            ->assertSee(route('customers.show', $customer))
+            ->assertSee('Detail')
+            ->assertDontSee(route('customers.edit', $customer))
+            ->assertDontSee(route('customers.destroy', $customer));
+
+        $this->withSession(['user_id' => $technician->id])
+            ->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('Technician detail customer')
+            ->assertDontSee('Edit pelanggan')
+            ->assertDontSee('Hapus');
+
+        $this->withSession(['user_id' => $technician->id])
+            ->get(route('customers.edit', $customer))
             ->assertForbidden();
     }
 
