@@ -39,7 +39,10 @@ class CustomerPortalController extends Controller
         }
 
         $limiter->clear($key);
-        $request->session()->regenerate();
+        // A customer login must not inherit billing-admin identity or unrelated
+        // privilege-bearing data from an existing browser session.
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
         $request->session()->put('customer_id', $customer->id);
         Audit::log('portal.login_succeeded', Customer::class, $customer->id);
         return redirect()->intended(route('portal.home'));
