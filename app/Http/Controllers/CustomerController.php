@@ -284,8 +284,9 @@ class CustomerController extends Controller
 
         $fupEnabled = $customer->fup_override !== null
             ? (bool) $customer->fup_override
-            : (bool) $package->fup_enabled;
-        $fupProfile = $customer->fup_override === true && filled($customer->fup_speed_after)
+            : ((bool) $customer->fup_enabled || (bool) $package->fup_enabled);
+        $fupProfile = filled($customer->fup_speed_after)
+            && ($customer->fup_override === true || ($customer->fup_override === null && $customer->fup_enabled))
             ? $customer->fup_speed_after
             : $package->fup_speed_after;
 
