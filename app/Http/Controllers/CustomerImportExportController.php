@@ -157,7 +157,11 @@ class CustomerImportExportController
                     'router_id' => $router?->id,
                     'pppoe_username' => $service === 'pppoe' ? $username : null,
                     'hotspot_username' => $service === 'hotspot' ? $username : null,
-                    'hotspot_profile' => $service === 'hotspot' ? ($hotspotProfile?->name ?: ($hotspotProfileName !== '' ? $hotspotProfileName : null)) : null,
+                    // The legacy column is NOT NULL for all customer records.
+                    // Keep imported users compatible even when no managed profile was selected.
+                    'hotspot_profile' => $service === 'hotspot'
+                        ? ($hotspotProfile?->name ?: ($hotspotProfileName !== '' ? $hotspotProfileName : 'default'))
+                        : 'default',
                     'hotspot_profile_id' => $service === 'hotspot' ? $hotspotProfile?->id : null,
                     'pppoe_profile_normal' => $service === 'pppoe' ? ($data['pppoe_profile_normal'] ?? $package?->normal_profile) : null,
                     'pppoe_profile_isolir' => $data['pppoe_profile_isolir'] ?? 'ISOLIR',
