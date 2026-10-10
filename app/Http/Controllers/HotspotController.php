@@ -56,6 +56,14 @@ class HotspotController extends Controller
             'vouchers' => $voucherQuery->paginate(100)->withQueryString(),
             'canManageVouchers' => $canManage,
             'filters' => $filters,
+            'stats' => [
+                'profiles' => HotspotProfile::count(),
+                'vouchers' => HotspotVoucher::count(),
+                'active' => HotspotVoucher::where('status', 'active')->count(),
+                'expired' => HotspotVoucher::where('status', 'expired')->count(),
+                'sync_failed' => HotspotVoucher::whereIn('sync_status', ['failed', 'missing'])->count()
+                    + HotspotProfile::whereIn('sync_status', ['failed', 'missing'])->count(),
+            ],
         ]);
     }
 
