@@ -314,28 +314,6 @@ class CustomerController extends Controller
         return redirect()->route('customers.edit', $customer)->with($feedbackKey, $message);
     }
 
-    public function isolate(Customer $customer, IsolationService $isolation)
-    {
-        try {
-            $isolation->isolate($customer);
-            return redirect()->route('customers.show', $customer)->with('success', 'Pelanggan berhasil diisolir.');
-        } catch (\Throwable $exception) {
-            report($exception);
-            return redirect()->route('customers.show', $customer)->with('error', 'Isolir gagal diterapkan. Status pelanggan tidak boleh dianggap berubah; periksa koneksi dan log MikroTik.');
-        }
-    }
-
-    public function unisolate(Customer $customer, IsolationService $isolation)
-    {
-        try {
-            $isolation->unisolate($customer);
-            return redirect()->route('customers.show', $customer)->with('success', 'Permintaan buka isolir berhasil diproses.');
-        } catch (\Throwable $exception) {
-            report($exception);
-            return redirect()->route('customers.show', $customer)->with('error', 'Buka isolir gagal. Periksa koneksi dan log MikroTik sebelum mencoba kembali.');
-        }
-    }
-
     public function terminate(Customer $customer, RouterOsService $routerOs)
     {
         if ($customer->status === 'terminated') {
