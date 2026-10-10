@@ -103,7 +103,7 @@
                                 <button class="btn btn-sm btn-outline-info">Simpan interface</button>
                             </form>
                             <form method="POST" action="{{ route('routers.test', $r) }}" class="d-inline">@csrf<button class="btn btn-sm btn-outline-success">Test</button></form>
-                            <form method="POST" action="{{ route('routers.destroy', $r) }}" class="d-inline">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" onclick="return confirm('Hapus router?')">Hapus</button></form>
+                            <form method="POST" action="{{ route('routers.destroy', $r) }}" class="d-inline">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" onclick="return confirm('Hapus router ini? Penghapusan ditolak jika masih dipakai pelanggan, paket, profil, atau voucher.')">Hapus</button></form>
                         </td>
                     </tr>
                 @empty
