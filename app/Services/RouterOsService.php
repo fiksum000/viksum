@@ -157,6 +157,32 @@ class RouterOsService {
     return $script.' } }';
   }
 
+  public function deleteHotspotProfile(HotspotProfile $profile): void
+  {
+    $router = $profile->router;
+    if (! $router || ! $router->enabled) {
+      throw new RuntimeException('Router profil Hotspot tidak tersedia atau dinonaktifkan.');
+    }
+
+    $client = $this->client($router);
+    $names = [$profile->name, $profile->name.'-FUP'];
+    $users = $client->query('/ip/hotspot/user/print')->read();
+    foreach ($users as $user) {
+      if (in_array($user['profile'] ?? null, $names, true)) {
+        throw new RuntimeException("Profil '{$profile->name}' masih digunakan akun Hotspot di router.");
+      }
+    }
+
+    $profiles = $client->query('/ip/hotspot/user/profile/print')->read();
+    foreach ($names as $name) {
+      foreach ($profiles as $row) {
+        if (($row['name'] ?? null) === $name && isset($row['.id'])) {
+          $client->query((new Query('/ip/hotspot/user/profile/remove'))->equal('.id', $row['.id']))->read();
+        }
+      }
+    }
+  }
+
   public function setHotspotUserProfile(Router $router, string $username, string $profile): void
   {
     $client = $this->client($router);
