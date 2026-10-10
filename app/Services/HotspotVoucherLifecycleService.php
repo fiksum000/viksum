@@ -182,7 +182,7 @@ class HotspotVoucherLifecycleService
             return;
         }
 
-        $this->routerOs->setHotspotUserProfile($router, $voucher->username, $profile->name.'-FUP');
+        $this->routerOs->setHotspotUserProfile($router, $voucher->username, $profile->routerProfileName().'-FUP');
         $this->routerOs->disconnectHotspotActive($router, $voucher->username);
         $voucher->update(['fup_applied' => true]);
     }
