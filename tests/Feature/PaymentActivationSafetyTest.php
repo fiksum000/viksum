@@ -51,6 +51,49 @@ class PaymentActivationSafetyTest extends TestCase
         Queue::assertNothingPushed();
     }
 
+    public function test_manual_payment_is_blocked_while_tripay_checkout_exists(): void
+    {
+        Queue::fake();
+        $finance = User::query()->create([
+            'name' => 'Finance checkout test',
+            'email' => 'finance-checkout-test@example.test',
+            'password' => 'strong-test-password',
+            'role' => 'finance',
+        ]);
+        $customer = $this->customer('tripay-checkout-customer', 'active');
+        $invoice = $this->invoice($customer, 'unpaid', 'INV-TRIPAY-CHECKOUT');
+        $invoice->update([
+            'payment_url' => 'https://example.test/checkout',
+            'payment_reference' => 'TRIPAY-CHECKOUT-REF',
+        ]);
+        Payment::query()->create([
+            'invoice_id' => $invoice->id,
+            'provider' => 'tripay',
+            'reference' => 'TRIPAY-CHECKOUT-REF',
+            'merchant_ref' => $invoice->invoice_number,
+            'channel' => 'QRIS',
+            'amount' => $invoice->total,
+            'status' => 'pending',
+            'checkout_url' => 'https://example.test/checkout',
+        ]);
+
+        $this->withSession(['user_id' => $finance->id])
+            ->from(route('invoices.show', $invoice))
+            ->post(route('invoices.manual-payment', $invoice), [
+                'amount' => 100000,
+                'channel' => 'cash',
+            ])
+            ->assertRedirect(route('invoices.show', $invoice))
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('invoices', ['id' => $invoice->id, 'status' => 'unpaid']);
+        $this->assertDatabaseMissing('payments', [
+            'invoice_id' => $invoice->id,
+            'provider' => 'manual',
+        ]);
+        Queue::assertNothingPushed();
+    }
+
     public function test_payment_activation_does_not_restore_isolated_customer_with_another_overdue_invoice(): void
     {
         config(['billing.timezone' => 'Asia/Jakarta', 'billing.grace_days' => 0]);
