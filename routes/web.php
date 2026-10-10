@@ -60,6 +60,7 @@ Route::middleware('auth.session')->group(function (): void {
         Route::get('/packages', [PackageController::class, 'index'])->name('packages.index');
         Route::post('/packages', [PackageController::class, 'store'])->name('packages.store');
         Route::put('/packages/{package}', [PackageController::class, 'update'])->name('packages.update');
+        Route::post('/packages/{package}/sync', [PackageController::class, 'sync'])->name('packages.sync');
         Route::delete('/packages/{package}', [PackageController::class, 'destroy'])->name('packages.destroy');
         Route::post('/routers', [RouterController::class, 'store'])->name('routers.store');
         Route::put('/routers/{router}', [RouterController::class, 'update'])->name('routers.update');
