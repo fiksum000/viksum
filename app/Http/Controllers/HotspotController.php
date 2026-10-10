@@ -301,6 +301,30 @@ class HotspotController extends Controller
         }
     }
 
+    public function destroy(HotspotVoucher $voucher, RouterOsService $routerOs)
+    {
+        try {
+            $routerOs->disconnectHotspotActive($voucher->router, $voucher->username);
+            $routerOs->deleteHotspotUser($voucher->router, $voucher->username);
+        } catch (Throwable $exception) {
+            report($exception);
+            $voucher->update([
+                'sync_status' => 'failed',
+                'sync_error' => mb_substr($exception->getMessage(), 0, 2000),
+            ]);
+
+            return back()->with('error', 'Voucher tidak dihapus dari billing karena akun MikroTik belum berhasil dibersihkan.');
+        }
+
+        Audit::log('hotspot.voucher_deleted', HotspotVoucher::class, $voucher->id, [
+            'router_id' => $voucher->router_id,
+            'username' => $voucher->username,
+        ]);
+        $voucher->delete();
+
+        return back()->with('success', 'Sesi diputus dan voucher dihapus dari MikroTik serta billing.');
+    }
+
     public function syncVoucher(HotspotVoucher $voucher, RouterOsService $routerOs)
     {
         $profile = $voucher->hotspotProfile;
