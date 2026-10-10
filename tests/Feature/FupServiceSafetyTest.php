@@ -98,6 +98,8 @@ class FupServiceSafetyTest extends TestCase
             'package_id' => $package->id,
             'pppoe_username' => 'fup-active-user',
             'pppoe_profile_normal' => $package->normal_profile,
+            'fup_enabled' => true,
+            'fup_override' => true,
             'fup_speed_after' => $package->fup_speed_after,
         ]);
         $state = FupState::query()->create([
@@ -144,8 +146,8 @@ class FupServiceSafetyTest extends TestCase
 
         app(FupService::class)->collect();
 
-        $this->assertTrue($state->fresh()->limited);
         $this->assertSame(2000, $state->fresh()->total_bytes);
+        $this->assertTrue($state->fresh()->limited);
     }
 
     private function isolatedCustomerWithFupState(string $period): array
