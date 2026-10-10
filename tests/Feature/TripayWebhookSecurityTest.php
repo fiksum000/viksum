@@ -60,6 +60,58 @@ class TripayWebhookSecurityTest extends TestCase
         ]);
     }
 
+    public function test_late_tripay_callback_cannot_double_settle_manual_paid_invoice(): void
+    {
+        $customer = Customer::query()->create([
+            'customer_code' => 'CALLBACK-MANUAL-PAID-001',
+            'name' => 'Manually paid customer',
+            'service_type' => 'pppoe',
+            'status' => 'active',
+            'due_day' => 20,
+        ]);
+        $invoice = Invoice::query()->create([
+            'invoice_number' => 'INV-CALLBACK-MANUAL-PAID-001',
+            'public_token' => bin2hex(random_bytes(24)),
+            'customer_id' => $customer->id,
+            'period' => now(config('billing.timezone'))->format('Y-m'),
+            'issued_at' => now(config('billing.timezone'))->toDateString(),
+            'due_date' => now(config('billing.timezone'))->addDays(7)->toDateString(),
+            'subtotal' => 100000,
+            'total' => 100000,
+            'status' => 'paid',
+            'paid_at' => now(),
+        ]);
+        Payment::query()->create([
+            'invoice_id' => $invoice->id,
+            'provider' => 'manual',
+            'merchant_ref' => $invoice->invoice_number,
+            'channel' => 'Cash',
+            'amount' => $invoice->total,
+            'status' => 'paid',
+            'paid_at' => now(),
+        ]);
+
+        $payload = json_encode([
+            'reference' => 'TRIPAY-LATE-MANUAL-1',
+            'merchant_ref' => $invoice->invoice_number,
+            'status' => 'PAID',
+            'total_amount' => 100000,
+        ], JSON_THROW_ON_ERROR);
+        $tripay = Mockery::mock(TripayService::class);
+        $tripay->shouldReceive('verifyCallbackSignature')->once()->andReturn(true);
+        $this->app->instance(TripayService::class, $tripay);
+
+        $this->call('POST', '/api/webhooks/tripay', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_X_CALLBACK_EVENT' => 'payment_status',
+            'HTTP_X_CALLBACK_SIGNATURE' => 'valid-signature',
+        ], $payload)->assertUnprocessable();
+
+        $this->assertDatabaseHas('invoices', ['id' => $invoice->id, 'status' => 'paid']);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseMissing('payments', ['reference' => 'TRIPAY-LATE-MANUAL-1']);
+    }
+
     public function test_invalid_signature_cannot_poison_identical_valid_callback(): void
     {
         $payload = json_encode([
