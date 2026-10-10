@@ -176,6 +176,56 @@ class CustomerController extends Controller
         return view('customers.show', compact('customer', 'fupState'));
     }
 
+    public function isolate(Customer $customer, IsolationService $isolation)
+    {
+        if ($customer->status !== 'active') {
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Hanya pelanggan aktif yang dapat diisolir. Periksa status layanan terlebih dahulu.');
+        }
+
+        try {
+            $isolation->isolate($customer);
+            Audit::log('customer.isolated_manual', Customer::class, $customer->id, ['code' => $customer->customer_code]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('success', 'Pelanggan berhasil diisolir dan sesi aktif diputus.');
+        } catch (\\Throwable $exception) {
+            Log::warning('Manual customer isolation failed', [
+                'customer_id' => $customer->id,
+                'router_id' => $customer->router_id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Pelanggan belum diisolir: '.$exception->getMessage());
+        }
+    }
+
+    public function unisolate(Customer $customer, IsolationService $isolation)
+    {
+        if ($customer->status !== 'isolated') {
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Buka isolir hanya tersedia untuk pelanggan yang sedang berstatus isolir.');
+        }
+
+        try {
+            $isolation->unisolate($customer);
+            Audit::log('customer.unisolated_manual', Customer::class, $customer->id, ['code' => $customer->customer_code]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('success', 'Isolir dibuka. Profil normal atau FUP yang sesuai telah dipulihkan.');
+        } catch (\\Throwable $exception) {
+            Log::warning('Manual customer unisolation failed', [
+                'customer_id' => $customer->id,
+                'router_id' => $customer->router_id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Isolir belum dapat dibuka: '.$exception->getMessage());
+        }
+    }
+
     public function edit(Customer $customer)
     {
         return view('customers.form', $this->formData($customer));
