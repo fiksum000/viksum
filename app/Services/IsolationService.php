@@ -94,7 +94,9 @@ class IsolationService
                 && ($customer->fup_override === true || ($customer->fup_override === null && $customer->fup_enabled))
                 ? $customer->fup_speed_after
                 : $customer->package?->fup_speed_after;
-            $targetProfile = $state?->limited && $fupEnabled && filled($fupProfile)
+            $effectiveFupLimit = max(0, (int) ($customer->fup_limit_bytes ?: $customer->package?->fup_limit_bytes ?: 0));
+            $targetProfile = $state?->limited && $fupEnabled && $effectiveFupLimit > 0
+                && (int) $state->total_bytes >= $effectiveFupLimit && filled($fupProfile)
                 ? $fupProfile
                 : $normalProfile;
 
