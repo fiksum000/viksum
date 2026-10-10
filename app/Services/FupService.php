@@ -47,7 +47,10 @@ class FupService
                 $query->where('fup_override', true)
                     ->orWhere(function ($inherit): void {
                         $inherit->whereNull('fup_override')
-                            ->whereHas('package', fn ($package) => $package->where('fup_enabled', true));
+                            ->where(function ($enabled): void {
+                                $enabled->where('fup_enabled', true)
+                                    ->orWhereHas('package', fn ($package) => $package->where('fup_enabled', true));
+                            });
                     });
             })
             ->chunkById(50, function ($customers) use ($period, &$count, &$activeMaps, &$secretMaps): void {
@@ -268,19 +271,10 @@ class FupService
                         continue;
                     }
 
-                    // A customer who is isolated/suspended must not be switched back
-                    // to normal PPP profile by the FUP worker.
+                    // Preserve the limited state while the service is isolated,
+                    // suspended, or terminated so a later authorized restore can keep FUP.
+                    // Never touch the router profile for an inactive service.
                     if ($customer->status !== 'active') {
-                        $this->logFup(
-                            $customer,
-                            $state->period,
-                            'restored',
-                            (int) $state->total_bytes,
-                            $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
-                            null,
-                            'Layanan tidak aktif; status FUP dibersihkan tanpa mengubah profil isolir/router',
-                        );
-                        $state->update(['limited' => false]);
                         continue;
                     }
 
@@ -313,7 +307,7 @@ class FupService
             return (bool) $customer->fup_override;
         }
 
-        return (bool) $customer->package?->fup_enabled;
+        return (bool) $customer->fup_enabled || (bool) $customer->package?->fup_enabled;
     }
 
     private function effectiveLimit(Customer $customer): int
@@ -323,7 +317,8 @@ class FupService
 
     private function limitedProfile(Customer $customer): ?string
     {
-        if ($customer->fup_override === true && filled($customer->fup_speed_after)) {
+        if (filled($customer->fup_speed_after)
+            && ($customer->fup_override === true || ($customer->fup_override === null && $customer->fup_enabled))) {
             return $customer->fup_speed_after;
         }
 
