@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Olt;
+use App\Models\Customer;
 use App\Support\Audit;
 use Illuminate\Http\Request;
 
