@@ -89,28 +89,25 @@ class HotspotController extends Controller
         $routerOs->setHotspotUserEnabled($voucher->router, $voucher->username, $enable);
 
         if (! $enable) {
-
-            // Disabled credentials cannot be reused after their live session is removed.
-
+            // Prevent an already-authenticated client from continuing to use a disabled voucher.
             $routerOs->disconnectHotspotActive($voucher->router, $voucher->username);
-
         }
 
         $voucher->update(['status' => $enable ? 'active' : 'disabled']);
         Audit::log('hotspot.voucher_toggled', HotspotVoucher::class, $voucher->id, ['status' => $voucher->status]);
+
         return back()->with('success', 'Status voucher diperbarui di router dan Billing.');
     }
 
     public function destroy(HotspotVoucher $voucher, RouterOsService $routerOs)
     {
-        // Remove the live session before deleting the credential and local record.
-
+        // Only remove the local history after RouterOS has processed session/account cleanup.
         $routerOs->disconnectHotspotActive($voucher->router, $voucher->username);
-
         $routerOs->deleteHotspotUser($voucher->router, $voucher->username);
 
         Audit::log('hotspot.voucher_deleted', HotspotVoucher::class, $voucher->id);
         $voucher->delete();
+
         return back()->with('success', 'Voucher dihapus dari router dan Billing.');
     }
 
