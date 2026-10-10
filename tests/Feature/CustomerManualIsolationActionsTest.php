@@ -18,12 +18,30 @@ class CustomerManualIsolationActionsTest extends TestCase
         $admin = $this->loginAdmin();
         $customer = $this->customer('active');
 
-        $this->withSession(['user_id' => $admin->id])
+        $response = $this->withSession(['user_id' => $admin->id])
             ->get(route('customers.show', $customer))
             ->assertOk()
             ->assertSee('Isolir')
             ->assertSee(route('customers.isolate', $customer))
             ->assertDontSee('Buka isolir');
+
+        $this->assertSame(1, substr_count($response->getContent(), route('customers.isolate', $customer)),
+            'The customer detail page must render exactly one isolate action.');
+    }
+
+    public function test_isolated_customer_detail_shows_one_unisolate_action(): void
+    {
+        $admin = $this->loginAdmin();
+        $customer = $this->customer('isolated');
+
+        $response = $this->withSession(['user_id' => $admin->id])
+            ->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('Buka isolir')
+            ->assertDontSee('>Isolir</button>');
+
+        $this->assertSame(1, substr_count($response->getContent(), route('customers.unisolate', $customer)),
+            'The customer detail page must render exactly one unisolate action.');
     }
 
     public function test_manual_isolation_route_calls_service_and_returns_feedback(): void
