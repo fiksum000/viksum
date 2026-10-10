@@ -68,7 +68,13 @@ class InvoiceNotificationController
                 return back()->with('warning', 'Peringatan isolir tidak dikirim ulang karena tagihan atau status layanan sudah berubah.');
             }
             $graceDays = max(0, (int) ($customer->grace_days ?? config('billing.grace_days', 0)));
-            $isolationDate = $dueDate->copy()->addDays($graceDays + 1);
+            $warningDate = $dueDate->copy()->addDays($graceDays);
+            $isolationDate = $warningDate->copy()->addDay();
+            if (! $notification->scheduled_for
+                || ! $notification->scheduled_for->isSameDay(now($timezone))
+                || ! $warningDate->isSameDay(now($timezone))) {
+                return back()->with('warning', 'Peringatan H-1 hanya dapat dikirim ulang pada hari yang sama agar tidak mengirim jadwal isolir yang sudah lewat.');
+            }
             $variables += ['due_date' => $dueDate->format('d-m-Y'), 'isolation_date' => $isolationDate->format('d-m-Y'), 'payment_url' => $paymentUrl, 'grace_days' => (string) $graceDays];
             $message = "Yth. {$customer->name}, tagihan {$invoice->invoice_number} sebesar Rp {$amount} belum kami terima. Batas pembayaran sebelum isolir: {$isolationDate->format('d-m-Y')}. ID pelanggan: {$customer->customer_code}. Username layanan: {$serviceUsername}. Pembayaran: {$paymentUrl}. Portal pelanggan: ".route('portal.login')." (ID login: {$customer->customer_code}). Mohon lakukan pembayaran agar layanan tidak diisolir.";
         } elseif ($event === 'payment_success') {
