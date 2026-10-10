@@ -6,6 +6,7 @@ use App\Jobs\ActivatePaidCustomer;
 use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\Package;
+use App\Models\Payment;
 use App\Models\User;
 use App\Services\BillingNotificationService;
 use App\Services\IsolationService;
