@@ -116,6 +116,7 @@ class RouterOsService {
       }
 
       $secretToUpdate = $existingPrevious;
+      $previousProfile = $secretToUpdate['profile'] ?? null;
       $query = (new Query($secretToUpdate ? '/ppp/secret/set' : '/ppp/secret/add'))
           ->equal('name', $name)
           ->equal('password', $data['password'] ?? '')
@@ -129,6 +130,11 @@ class RouterOsService {
       $verified = $this->findPppSecret($router, $name);
       if (!$verified) {
           throw new RuntimeException("Secret PPP '{$name}' tidak terverifikasi setelah dikirim ke MikroTik.");
+      }
+      if ($secretToUpdate && $previousProfile !== $profile) {
+          // Force RouterOS to recreate dynamic queues with the newly assigned profile,
+          // including when a customer exits FUP or is restored from profile-based isolation.
+          $this->disconnectPppActive($router, $previousUsername ?: $name);
       }
   }
   public function deletePppSecret(Router $router,string $username):void{$client=$this->client($router);$rows=$this->findPppSecret($router,$username);foreach($rows as $row){if(isset($row['.id']))$client->query((new Query('/ppp/secret/remove'))->equal('.id',$row['.id']))->read();}}
