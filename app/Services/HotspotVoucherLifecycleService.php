@@ -53,6 +53,21 @@ class HotspotVoucherLifecycleService
                             continue;
                         }
 
+                        if ($voucher->hotspot_profile_id) {
+                            $expectedComment = (string) ($voucher->comment ?: 'VIKSUM:V:'.$voucher->id);
+                            $actualComment = (string) ($row['comment'] ?? '');
+                            $owned = $actualComment === $expectedComment
+                                || (str_starts_with($expectedComment, 'VIKSUM:V:')
+                                    && str_starts_with($actualComment, $expectedComment.'|FIRST='));
+                            if (! $owned) {
+                                $voucher->update([
+                                    'sync_status' => 'failed',
+                                    'sync_error' => 'Username ditemukan di router, tetapi penanda kepemilikan voucher tidak cocok. Akun tidak diubah.',
+                                ]);
+                                continue;
+                            }
+                        }
+
                         if ($voucher->sync_status !== 'synced') {
                             $voucher->update(['sync_status' => 'synced', 'sync_error' => null]);
                         }
@@ -62,7 +77,16 @@ class HotspotVoucherLifecycleService
 
                         if ($voucher->expires_at && $voucher->expires_at->lte(now(config('billing.timezone')))
                             && $voucher->status !== 'expired') {
-                            $this->routerOs->setHotspotUserEnabled($router, $voucher->username, false);
+                            if ($voucher->hotspot_profile_id) {
+                                $this->routerOs->setManagedHotspotUserEnabled(
+                                    $router,
+                                    $voucher->username,
+                                    false,
+                                    $voucher->comment ?: 'VIKSUM:V:'.$voucher->id,
+                                );
+                            } else {
+                                $this->routerOs->setHotspotUserEnabled($router, $voucher->username, false);
+                            }
                             $this->routerOs->disconnectHotspotActive($router, $voucher->username);
                             $voucher->update(['status' => 'expired', 'sync_error' => null]);
                         }
@@ -108,7 +132,7 @@ class HotspotVoucherLifecycleService
             return;
         }
 
-        $updates = ['first_login_at' => $timestamp];
+        $updates = ['first_login_at' => $timestamp, 'comment' => $comment];
         $profile = $voucher->hotspotProfile;
 
         if ($profile?->starts_on_first_login && $profile->validity_value && $profile->validity_unit) {
