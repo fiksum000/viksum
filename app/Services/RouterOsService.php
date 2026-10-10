@@ -1,6 +1,7 @@
 <?php
 namespace App\Services;
 use App\Models\Router;
+use App\Models\HotspotProfile;
 use Illuminate\Support\Facades\Log;
 use RouterOS\Client; use RouterOS\Config; use RouterOS\Query; use RuntimeException;
 class RouterOsService {
@@ -74,6 +75,106 @@ class RouterOsService {
   public function listHotspotProfiles(Router $router): array
   {
     return $this->client($router)->query('/ip/hotspot/user/profile/print')->read();
+  }
+
+  /**
+   * Push the application-managed profile and its optional FUP profile to RouterOS.
+   * MikroTik rate-limit order is upload (RX) / download (TX).
+   */
+  public function syncHotspotProfile(HotspotProfile $profile): void
+  {
+    $router = $profile->router;
+    if (! $router || ! $router->enabled) {
+      throw new RuntimeException('Router profil Hotspot tidak tersedia atau dinonaktifkan.');
+    }
+
+    $client = $this->client($router);
+    $onLogin = $this->managedHotspotOnLoginScript($profile->bind_mac);
+    $this->upsertHotspotRouterProfile(
+      $client,
+      $profile->name,
+      $profile->upload_speed.'/'.$profile->download_speed,
+      $profile->shared_users,
+      $onLogin,
+    );
+
+    if ($profile->fup_limit_bytes > 0 && filled($profile->fup_upload_speed) && filled($profile->fup_download_speed)) {
+      $this->upsertHotspotRouterProfile(
+        $client,
+        $profile->name.'-FUP',
+        $profile->fup_upload_speed.'/'.$profile->fup_download_speed,
+        $profile->shared_users,
+        $onLogin,
+      );
+    }
+  }
+
+  private function upsertHotspotRouterProfile(
+    Client $client,
+    string $name,
+    string $rateLimit,
+    int $sharedUsers,
+    string $onLogin,
+  ): void {
+    $rows = $client->query('/ip/hotspot/user/profile/print')->read();
+    $matches = collect($rows)->filter(fn (array $row) => ($row['name'] ?? null) === $name)->values();
+    if ($matches->count() > 1) {
+      throw new RuntimeException("Profil RouterOS '{$name}' ditemukan lebih dari satu kali; sinkronisasi dihentikan.");
+    }
+
+    $query = new Query($matches->isNotEmpty() ? '/ip/hotspot/user/profile/set' : '/ip/hotspot/user/profile/add');
+    $query->equal('name', $name)
+      ->equal('rate-limit', $rateLimit)
+      ->equal('shared-users', (string) max(1, $sharedUsers))
+      ->equal('on-login', $onLogin);
+
+    if ($matches->isNotEmpty()) {
+      $id = $matches[0]['.id'] ?? null;
+      if (! $id) {
+        throw new RuntimeException("ID profil RouterOS '{$name}' tidak tersedia.");
+      }
+      $query->equal('.id', $id);
+    }
+
+    $client->query($query)->read();
+    $verified = $client->query('/ip/hotspot/user/profile/print')->read();
+    $row = collect($verified)->first(fn (array $item) => ($item['name'] ?? null) === $name);
+    if (! $row
+      || ($row['rate-limit'] ?? null) !== $rateLimit
+      || (int) ($row['shared-users'] ?? 1) !== max(1, $sharedUsers)) {
+      throw new RuntimeException("Profil RouterOS '{$name}' tidak cocok setelah sinkronisasi.");
+    }
+  }
+
+  private function managedHotspotOnLoginScript(bool $bindMac): string
+  {
+    $script = ':local u $"user"; :local id [/ip hotspot user find where name=$u]; :if ([:len $id] > 0) do={ :local c [/ip hotspot user get $id comment]; :if ([:find $c "VIKSUM:V:"] = 0) do={ :if ([:find $c "|FIRST="] = nil) do={ /ip hotspot user set $id comment=($c . "|FIRST=" . [/system clock get date] . " " . [/system clock get time]); }';
+
+    if ($bindMac) {
+      $script .= ' :local savedMac [/ip hotspot user get $id mac-address]; :if ($savedMac = "00:00:00:00:00:00") do={ /ip hotspot user set $id mac-address=$"mac-address"; }';
+    }
+
+    return $script.' } }';
+  }
+
+  public function setHotspotUserProfile(Router $router, string $username, string $profile): void
+  {
+    $client = $this->client($router);
+    $rows = $client->query((new Query('/ip/hotspot/user/print'))->where('name', $username))->read();
+    $matches = collect($rows)->filter(fn (array $row) => ($row['name'] ?? null) === $username)->values();
+
+    if ($matches->count() !== 1 || ! isset($matches[0]['.id'])) {
+      throw new RuntimeException("Akun Hotspot '{$username}' tidak ditemukan secara unik di router.");
+    }
+
+    $profiles = $client->query('/ip/hotspot/user/profile/print')->read();
+    if (! collect($profiles)->contains(fn (array $row) => ($row['name'] ?? null) === $profile)) {
+      throw new RuntimeException("Profil Hotspot '{$profile}' belum ada di router.");
+    }
+
+    $client->query((new Query('/ip/hotspot/user/set'))
+      ->equal('.id', $matches[0]['.id'])
+      ->equal('profile', $profile))->read();
   }
 
   public function assertHotspotProfileExists(Router $router, string $profile): void
