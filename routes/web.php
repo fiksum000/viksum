@@ -40,6 +40,7 @@ Route::middleware('auth.session')->group(function (): void {
         Route::post('/customers', [CustomerController::class, 'store'])->name('customers.store');
         Route::get('/customers/{customer}/edit', [CustomerController::class, 'edit'])->name('customers.edit');
         Route::put('/customers/{customer}', [CustomerController::class, 'update'])->name('customers.update');
+        Route::patch('/customers/{customer}/terminate', [CustomerController::class, 'terminate'])->name('customers.terminate');
         Route::delete('/customers/{customer}', [CustomerController::class, 'destroy'])->middleware('role:super_admin,admin')->name('customers.destroy');
         Route::post('/customers/import', [CustomerImportExportController::class, 'import'])->middleware('role:super_admin,admin')->name('customers.import');
     });
