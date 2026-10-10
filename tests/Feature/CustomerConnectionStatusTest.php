@@ -203,6 +203,36 @@ class CustomerConnectionStatusTest extends TestCase
         $this->assertDatabaseHas('customers', ['id' => $customer->id, 'status' => 'active']);
     }
 
+    public function test_deleting_terminated_customer_disconnects_stale_session_when_secret_is_missing(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Missing secret deletion router',
+            'host' => '192.0.2.27',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-delete-stale', 'Stale session delete customer', 'terminated');
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('findPppSecret')->once()
+            ->withArgs(fn ($actualRouter, $username) =>
+                $actualRouter->id === $router->id && $username === 'ppp-delete-stale')
+            ->andReturn([]);
+        $routerOs->shouldReceive('disconnectPppActive')->once()
+            ->withArgs(fn ($actualRouter, $username) =>
+                $actualRouter->id === $router->id && $username === 'ppp-delete-stale');
+        $routerOs->shouldNotReceive('deletePppSecret');
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->delete(route('customers.destroy', $customer))
+            ->assertRedirect(route('customers.index'))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('customers', ['id' => $customer->id]);
+    }
+
     public function test_customer_without_invoice_history_can_be_deleted_after_router_account_cleanup(): void
     {
         $router = Router::query()->create([
