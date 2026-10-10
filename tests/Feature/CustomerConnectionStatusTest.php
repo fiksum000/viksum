@@ -160,7 +160,7 @@ class CustomerConnectionStatusTest extends TestCase
             'password' => 'test-password',
         ]);
         $customer = $this->customer($router, 'ppp-detail', 'Customer detail example', 'active');
-        $this->invoice($customer, 'unpaid');
+        $invoice = $this->invoice($customer, 'unpaid');
         $this->loginAdmin();
 
         $this->get(route('customers.show', $customer))
@@ -168,7 +168,9 @@ class CustomerConnectionStatusTest extends TestCase
             ->assertSee('Detail Pelanggan')
             ->assertSee('Customer detail example')
             ->assertSee('Riwayat tagihan terbaru')
-            ->assertSee('Unpaid');
+            ->assertSee('Unpaid')
+            ->assertSee('Detail invoice')
+            ->assertSee(route('invoices.show', $invoice));
     }
 
     public function test_terminating_pppoe_customer_disables_secret_and_disconnects_session(): void
