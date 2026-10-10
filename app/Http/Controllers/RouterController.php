@@ -31,7 +31,7 @@ class RouterController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
-            'host' => ['required', 'string', 'max:255'],
+            'host' => ['required', 'string', 'max:255', Rule::unique('routers', 'host')->where(fn ($query) => $query->where('port', (int) $request->input('port')))],
             'port' => ['required', 'integer', 'min:1', 'max:65535'],
             'username' => ['required', 'string', 'max:100'],
             'password' => ['required', 'string'],
@@ -50,7 +50,7 @@ class RouterController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
-            'host' => ['required', 'string', 'max:255'],
+            'host' => ['required', 'string', 'max:255', Rule::unique('routers', 'host')->where(fn ($query) => $query->where('port', (int) $request->input('port')))->ignore($router->id)],
             'port' => ['required', 'integer', 'min:1', 'max:65535'],
             'username' => ['required', 'string', 'max:100'],
             'password' => ['nullable', 'string'],
