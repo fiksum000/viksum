@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Customer;
+use App\Models\HotspotProfile;
 use App\Models\Package;
 use App\Models\Router;
 use App\Models\User;
@@ -15,20 +16,24 @@ class CustomerHotspotSyncTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_creating_hotspot_customer_synchronizes_credentials_and_profile_to_routeros(): void
+    public function test_creating_hotspot_customer_synchronizes_billing_profile_and_credentials_to_routeros(): void
     {
         $router = $this->router();
         $package = $this->package();
+        $profile = $this->profile($router, 'hs-normal');
         $admin = $this->loginAdmin();
 
         $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('syncHotspotProfile')
+            ->once()
+            ->withArgs(fn ($actualProfile) => $actualProfile->id === $profile->id);
         $routerOs->shouldReceive('createOrUpdateHotspotUser')
             ->once()
-            ->withArgs(fn ($actualRouter, $username, $password, $profile, $comment, $previousUsername, $enabled) =>
+            ->withArgs(fn ($actualRouter, $username, $password, $routerProfile, $comment, $previousUsername, $enabled) =>
                 $actualRouter->id === $router->id
                 && $username === 'hs-customer-1'
                 && $password === 'hotspot-secret'
-                && $profile === 'hs-normal'
+                && $routerProfile === $profile->routerProfileName()
                 && str_contains($comment, 'Billing customer')
                 && $previousUsername === null
                 && $enabled === true);
@@ -38,22 +43,26 @@ class CustomerHotspotSyncTest extends TestCase
             ->post(route('customers.store'), $this->payload($router, $package, [
                 'hotspot_username' => 'hs-customer-1',
                 'hotspot_password' => 'hotspot-secret',
-                'hotspot_profile' => 'hs-normal',
+                'hotspot_profile_id' => $profile->id,
             ]))
             ->assertRedirect()
             ->assertSessionHas('success');
 
         $customer = Customer::query()->where('hotspot_username', 'hs-customer-1')->firstOrFail();
-        $this->assertSame('hs-normal', $customer->hotspot_profile);
+        $this->assertSame($profile->name, $customer->hotspot_profile);
+        $this->assertSame($profile->id, $customer->hotspot_profile_id);
         $this->assertSame('hotspot-secret', $customer->hotspot_password);
         $this->assertSame($router->id, $customer->router_id);
     }
 
-    public function test_editing_hotspot_customer_uses_the_previous_username_and_keeps_password_when_blank(): void
+    public function test_editing_hotspot_customer_uses_managed_profile_and_keeps_password_when_blank(): void
     {
         $router = $this->router();
         $package = $this->package();
+        $oldProfile = $this->profile($router, 'hs-normal');
+        $newProfile = $this->profile($router, 'hs-premium');
         $admin = $this->loginAdmin();
+
         $customer = Customer::query()->create([
             'customer_code' => '728828009',
             'name' => 'Existing Hotspot Customer',
@@ -65,18 +74,22 @@ class CustomerHotspotSyncTest extends TestCase
             'package_id' => $package->id,
             'hotspot_username' => 'hs-old-name',
             'hotspot_password' => 'current-secret',
-            'hotspot_profile' => 'hs-normal',
+            'hotspot_profile' => $oldProfile->name,
+            'hotspot_profile_id' => $oldProfile->id,
             'portal_password' => 'WIFIpass',
         ]);
 
         $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('syncHotspotProfile')
+            ->once()
+            ->withArgs(fn ($actualProfile) => $actualProfile->id === $newProfile->id);
         $routerOs->shouldReceive('createOrUpdateHotspotUser')
             ->once()
-            ->withArgs(fn ($actualRouter, $username, $password, $profile, $comment, $previousUsername, $enabled) =>
+            ->withArgs(fn ($actualRouter, $username, $password, $routerProfile, $comment, $previousUsername, $enabled) =>
                 $actualRouter->id === $router->id
                 && $username === 'hs-new-name'
                 && $password === 'current-secret'
-                && $profile === 'hs-premium'
+                && $routerProfile === $newProfile->routerProfileName()
                 && $previousUsername === 'hs-old-name'
                 && $enabled === true);
         $this->app->instance(RouterOsService::class, $routerOs);
@@ -86,7 +99,7 @@ class CustomerHotspotSyncTest extends TestCase
             'name' => $customer->name,
             'hotspot_username' => 'hs-new-name',
             'hotspot_password' => '',
-            'hotspot_profile' => 'hs-premium',
+            'hotspot_profile_id' => $newProfile->id,
             'portal_password' => 'WIFIpass',
         ]);
 
@@ -98,7 +111,8 @@ class CustomerHotspotSyncTest extends TestCase
         $customer->refresh();
         $this->assertSame('hs-new-name', $customer->hotspot_username);
         $this->assertSame('current-secret', $customer->hotspot_password);
-        $this->assertSame('hs-premium', $customer->hotspot_profile);
+        $this->assertSame($newProfile->name, $customer->hotspot_profile);
+        $this->assertSame($newProfile->id, $customer->hotspot_profile_id);
     }
 
     private function payload(Router $router, Package $package, array $overrides = []): array
@@ -125,6 +139,20 @@ class CustomerHotspotSyncTest extends TestCase
             'username' => 'billing-customer-test',
             'password' => 'test-only-password',
             'enabled' => true,
+        ]);
+    }
+
+    private function profile(Router $router, string $name): HotspotProfile
+    {
+        return HotspotProfile::query()->create([
+            'router_id' => $router->id,
+            'name' => $name,
+            'download_speed' => '10M',
+            'upload_speed' => '2M',
+            'shared_users' => 1,
+            'starts_on_first_login' => true,
+            'enabled' => true,
+            'sync_status' => 'synced',
         ]);
     }
 
