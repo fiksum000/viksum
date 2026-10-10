@@ -28,6 +28,11 @@ class InvoiceCancellationSafetyTest extends TestCase
             'payment_url' => null,
             'payment_reference' => null,
         ]);
+
+        $this->get(route('public.pay', $invoice->public_token))
+            ->assertOk()
+            ->assertSee('Invoice ini sudah dibatalkan')
+            ->assertDontSee('Bayar via Tripay');
     }
 
     public function test_invoice_with_tripay_payment_attempt_cannot_be_cancelled(): void
