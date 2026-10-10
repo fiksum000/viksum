@@ -87,16 +87,19 @@
             <div class="card-header fw-semibold">Riwayat tagihan terbaru</div>
             <div class="table-responsive">
                 <table class="table table-sm table-hover mb-0">
-                    <thead><tr><th>Periode</th><th>Total</th><th>Status</th></tr></thead>
+                    <thead><tr><th>Periode</th><th>Total</th><th>Status</th>@if(in_array($billingUser?->role,['super_admin','admin'],true))<th>Aksi</th>@endif</tr></thead>
                     <tbody>
                     @forelse($customer->invoices as $invoice)
                         <tr>
                             <td>{{ $invoice->period }}</td>
                             <td>Rp {{ number_format($invoice->total,0,',','.') }}</td>
                             <td><span class="badge text-bg-{{ $invoice->status === 'paid' ? 'success' : ($invoice->status === 'unpaid' ? 'warning' : 'secondary') }}">{{ ucfirst($invoice->status) }}</span></td>
+                            @if(in_array($billingUser?->role,['super_admin','admin'],true))
+                                <td><a class="btn btn-sm btn-outline-primary" href="{{ route('invoices.show', $invoice) }}">Detail invoice</a></td>
+                            @endif
                         </tr>
                     @empty
-                        <tr><td colspan="3" class="text-center text-muted py-3">Belum ada tagihan.</td></tr>
+                        <tr><td colspan="{{ in_array($billingUser?->role,['super_admin','admin'],true) ? 4 : 3 }}" class="text-center text-muted py-3">Belum ada tagihan.</td></tr>
                     @endforelse
                     </tbody>
                 </table>
