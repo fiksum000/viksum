@@ -29,10 +29,10 @@
             </form>
         @endif
         @if(in_array($billingUser?->role,['super_admin','admin'],true))
-            <form method="POST" action="{{ route('customers.destroy',$customer) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Hapus permanen pelanggan {{ $customer->customer_code }} — {{ $customer->name }}? Jika memiliki riwayat tagihan, penghapusan akan ditolak.">
+            <form method="POST" action="{{ route('customers.destroy',$customer) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Hapus permanen pelanggan {{ $customer->customer_code }} — {{ $customer->name }}? Hanya pelanggan Berhenti atau Uji coba tanpa riwayat tagihan yang dapat dihapus. Akun MikroTik harus berhasil dibersihkan lebih dahulu.">
                 @csrf
                 @method('DELETE')
-                <button class="btn btn-outline-danger" type="submit">Hapus</button>
+                <button class="btn btn-outline-danger" type="submit" @disabled(!in_array($customer->status, ['terminated', 'trial'], true)) title="{{ in_array($customer->status, ['terminated', 'trial'], true) ? 'Pelanggan memenuhi syarat untuk diperiksa sebelum dihapus.' : 'Hentikan layanan terlebih dahulu sebelum menghapus permanen.' }}">Hapus</button>
             </form>
         @endif
     </div>
