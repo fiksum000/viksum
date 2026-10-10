@@ -76,6 +76,39 @@ class CustomerConnectionStatusTest extends TestCase
             ->assertSee('Router tidak dapat dibaca');
     }
 
+    public function test_imported_hotspot_customer_without_managed_profile_can_be_stopped(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Legacy Hotspot router',
+            'host' => '192.0.2.26',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = Customer::query()->create([
+            'customer_code' => 'LEGACY-HS-'.strtoupper(bin2hex(random_bytes(4))),
+            'name' => 'Imported legacy Hotspot customer',
+            'service_type' => 'hotspot',
+            'status' => 'active',
+            'router_id' => $router->id,
+            'hotspot_username' => 'legacy-hotspot-user',
+        ]);
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('setHotspotUserEnabled')->once()
+            ->withArgs(fn ($r, $username, $enabled) => $r->id === $router->id && $username === 'legacy-hotspot-user' && $enabled === false);
+        $routerOs->shouldReceive('disconnectHotspotActive')->once()
+            ->withArgs(fn ($r, $username) => $r->id === $router->id && $username === 'legacy-hotspot-user');
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->patch(route('customers.terminate', $customer))
+            ->assertRedirect(route('customers.show', $customer))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'status' => 'terminated']);
+    }
+
     public function test_termination_router_errors_are_logged_not_exposed_to_browser(): void
     {
         $router = Router::query()->create([
