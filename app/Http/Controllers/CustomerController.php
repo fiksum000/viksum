@@ -244,18 +244,18 @@ class CustomerController extends Controller
             return;
         }
 
-        if (!$customer->router_id || !$customer->router) {
-            throw new RuntimeException('Pilih router MikroTik untuk layanan PPPoE.');
-        }
-
-        // A trial customer must not retain working credentials if an existing customer
-        // was converted to trial. Keep the secret for later use, but disable and disconnect it.
+        // Trial records need no router. If an existing PPP account on the same
+        // router is being downgraded to trial, disable it rather than leave it online.
         if ($customer->status === 'trial') {
-            if (filled($previousUsername)) {
+            if (filled($previousUsername) && $customer->router) {
                 $routerOs->enablePppSecret($customer->router, $previousUsername, false);
                 $routerOs->disconnectPppActive($customer->router, $previousUsername);
             }
             return;
+        }
+
+        if (!$customer->router_id || !$customer->router) {
+            throw new RuntimeException('Pilih router MikroTik untuk layanan PPPoE.');
         }
 
         if (blank($customer->pppoe_username) || blank($customer->pppoe_password)) {
