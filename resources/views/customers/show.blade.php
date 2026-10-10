@@ -10,6 +10,19 @@
         @if(in_array($billingUser?->role,['super_admin','admin','operator'],true))
             <a href="{{ route('customers.edit',$customer) }}" class="btn btn-primary">Edit pelanggan</a>
         @endif
+        @if(in_array($billingUser?->role,['super_admin','admin','operator'],true) && $customer->status === 'active')
+            <form method="POST" action="{{ route('customers.isolate',$customer) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Isolir pelanggan {{ $customer->name }} sekarang? Sesi aktif akan diputus dan metode isolir sesuai pengaturan billing diterapkan.">
+                @csrf
+                @method('PATCH')
+                <button class="btn btn-outline-danger" type="submit">Isolir</button>
+            </form>
+        @elseif(in_array($billingUser?->role,['super_admin','admin','operator'],true) && $customer->status === 'isolated')
+            <form method="POST" action="{{ route('customers.unisolate',$customer) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Buka isolir pelanggan {{ $customer->name }}? Profil layanan normal atau profil FUP yang sesuai akan dipulihkan.">
+                @csrf
+                @method('PATCH')
+                <button class="btn btn-outline-success" type="submit">Buka isolir</button>
+            </form>
+        @endif
         @if(in_array($billingUser?->role,['super_admin','admin','operator'],true) && $customer->status !== 'terminated')
             <form method="POST" action="{{ route('customers.terminate',$customer) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Hentikan layanan {{ $customer->name }}? Akun layanan akan dinonaktifkan dan sesi aktif diputus, tetapi data serta riwayat tagihan tetap disimpan.">
                 @csrf
