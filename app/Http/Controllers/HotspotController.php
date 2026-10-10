@@ -202,7 +202,7 @@ class HotspotController extends Controller
                     $profile->router,
                     $username,
                     $password,
-                    $profile->name,
+                    $profile->routerProfileName(),
                     $comment,
                     true,
                 );
@@ -264,7 +264,7 @@ class HotspotController extends Controller
                     $voucher->router,
                     $voucher->username,
                     $voucher->password,
-                    $voucher->fup_applied ? $profile->name.'-FUP' : $profile->name,
+                    $voucher->fup_applied ? $profile->routerProfileName().'-FUP' : $profile->routerProfileName(),
                     $voucher->comment ?: 'VIKSUM:V:'.$voucher->id,
                     $voucher->username,
                     $enable,
