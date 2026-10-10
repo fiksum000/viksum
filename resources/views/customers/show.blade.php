@@ -53,7 +53,7 @@
                         <dt class="col-5">Profil normal</dt><dd class="col-7">{{ $customer->pppoe_profile_normal ?: $customer->package?->normal_profile ?: '—' }}</dd>
                         <dt class="col-5">Profil isolir</dt><dd class="col-7">{{ $customer->pppoe_profile_isolir ?: config('billing.isolation_profile', '—') }}</dd>
                         <dt class="col-5">FUP</dt><dd class="col-7">{{ $customer->fup_override === null ? 'Ikuti paket' : ($customer->fup_override ? 'Aktif' : 'Nonaktif') }}</dd>
-                        <dt class="col-5">Pemakaian FUP</dt><dd class="col-7">{{ $fupState ? number_format($fupState->used_bytes / 1073741824, 2, ',', '.').' GB' : 'Belum ada data periode ini' }}</dd>
+                        <dt class="col-5">Pemakaian FUP</dt><dd class="col-7">{{ $fupState ? number_format($fupState->total_bytes / 1073741824, 2, ',', '.').' GB' : 'Belum ada data periode ini' }}</dd>
                         <dt class="col-5">Status batas FUP</dt><dd class="col-7">{{ $fupState?->limited ? 'Kecepatan dibatasi' : 'Normal / belum dibatasi' }}</dd>
                     @else
                         <dt class="col-5">Profil Hotspot</dt><dd class="col-7">{{ $customer->hotspotProfile?->name ?: $customer->hotspot_profile ?: '—' }}</dd>
