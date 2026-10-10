@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Invoice;
+use App\Jobs\ActivatePaidCustomer;
+use Illuminate\Support\Facades\Log;
 use App\Services\{BillingNotificationService, BillingService, TripayService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -53,6 +55,29 @@ class InvoiceController
         }
     }
 
+    public function retryActivation(Invoice $invoice)
+    {
+        if ($invoice->status !== 'paid') {
+            return back()->with('error', 'Proses lanjutan hanya dapat diulang untuk invoice yang sudah lunas.');
+        }
+
+        try {
+            ActivatePaidCustomer::dispatch($invoice->id);
+        } catch (\\Throwable $exception) {
+            Log::warning('Paid invoice activation retry could not be queued', [
+                'invoice_id' => $invoice->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return back()->with('error', 'Proses lanjutan belum masuk antrean. Periksa status worker/queue lalu coba lagi.');
+        }
+
+        Audit::log('payment.activation_retry_queued', Invoice::class, $invoice->id, [
+            'invoice_number' => $invoice->invoice_number,
+        ]);
+
+        return back()->with('success', 'Proses lanjutan pembayaran masuk antrean ulang. Pemulihan layanan tetap mengikuti aturan status dan tunggakan billing.');
+    }
     public function show(Invoice $invoice, TripayService $tripay)
     {
         $invoice->load(['customer.package', 'payments', 'items']);
