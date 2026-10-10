@@ -158,7 +158,7 @@
                     @if($package->sync_status !== 'legacy')
                         <form method="POST" action="{{ route('packages.sync', $package) }}">@csrf<button class="btn btn-sm btn-outline-primary">Sinkron ulang</button></form>
                     @endif
-                    <form method="POST" action="{{ route('packages.destroy', $package) }}" onsubmit="return confirm('Hapus paket ini? Profil RouterOS yang masih digunakan tidak akan dihapus.')">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger">Hapus</button></form>
+                    <form method="POST" action="{{ route('packages.destroy', $package) }}" onsubmit="return confirm('Hapus paket ini? Penghapusan ditolak jika pelanggan atau secret/profil MikroTik masih menggunakannya.')">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger">Hapus</button></form>
                 </div>
             </div>
 
