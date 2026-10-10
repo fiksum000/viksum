@@ -48,7 +48,7 @@ Route::middleware('auth.session')->group(function (): void {
     });
 
     Route::middleware('role:super_admin,admin')->group(function (): void {
-        Route::post('/customers/{customer}/portal-password/reset', [CustomerController::class, 'resetPortalPassword'])->middleware('throttle:5,1')->name('customers.portal-password.reset');
+        Route::post('/customers/{customer}/portal-password/reset', [CustomerController::class, 'resetPortalPassword'])->middleware(['role:super_admin,admin', 'throttle:5,1'])->name('customers.portal-password.reset');
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::post('/users', [UserController::class, 'store'])->name('users.store');
         Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
