@@ -2,6 +2,7 @@
 namespace App\Services;
 use App\Models\Router;
 use App\Models\HotspotProfile;
+use App\Models\HotspotVoucher;
 use Illuminate\Support\Facades\Log;
 use RouterOS\Client; use RouterOS\Config; use RouterOS\Query; use RuntimeException;
 class RouterOsService {
@@ -98,14 +99,48 @@ class RouterOsService {
       $onLogin,
     );
 
+    $fupName = $profile->routerProfileName().'-FUP';
     if ($profile->fup_limit_bytes > 0 && filled($profile->fup_upload_speed) && filled($profile->fup_download_speed)) {
       $this->upsertHotspotRouterProfile(
         $client,
-        $profile->routerProfileName().'-FUP',
+        $fupName,
         $profile->fup_upload_speed.'/'.$profile->fup_download_speed,
         $profile->shared_users,
         $onLogin,
       );
+    } else {
+      // If FUP was removed in billing, restore all users assigned to the managed
+      // FUP profile before removing it from the router.
+      $users = $client->query('/ip/hotspot/user/print')->read();
+      foreach ($users as $user) {
+        if (($user['profile'] ?? null) !== $fupName) {
+          continue;
+        }
+        $username = (string) ($user['name'] ?? '');
+        $id = $user['.id'] ?? null;
+        if ($username === '' || ! $id) {
+          throw new RuntimeException("Akun pada profil '{$fupName}' tidak dapat diidentifikasi; profil FUP tidak dihapus.");
+        }
+        $client->query((new Query('/ip/hotspot/user/set'))
+          ->equal('.id', $id)
+          ->equal('profile', $profile->routerProfileName()))->read();
+        $this->disconnectHotspotActive($router, $username);
+        HotspotVoucher::query()
+          ->where('router_id', $router->id)
+          ->where('username', $username)
+          ->update(['fup_applied' => false]);
+      }
+
+      $remainingUsers = $client->query('/ip/hotspot/user/print')->read();
+      if (collect($remainingUsers)->contains(fn (array $user) => ($user['profile'] ?? null) === $fupName)) {
+        throw new RuntimeException("Masih ada user yang menggunakan profil FUP '{$fupName}'.");
+      }
+      $routerProfiles = $client->query('/ip/hotspot/user/profile/print')->read();
+      foreach ($routerProfiles as $row) {
+        if (($row['name'] ?? null) === $fupName && isset($row['.id'])) {
+          $client->query((new Query('/ip/hotspot/user/profile/remove'))->equal('.id', $row['.id']))->read();
+        }
+      }
     }
   }
 
