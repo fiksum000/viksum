@@ -131,9 +131,10 @@ class RouterOsService {
       if (!$verified) {
           throw new RuntimeException("Secret PPP '{$name}' tidak terverifikasi setelah dikirim ke MikroTik.");
       }
-      if ($secretToUpdate && $previousProfile !== $profile) {
-          // Force RouterOS to recreate dynamic queues with the newly assigned profile,
-          // including when a customer exits FUP or is restored from profile-based isolation.
+      $usernameChanged = filled($previousUsername) && $previousUsername !== $name;
+      if ($secretToUpdate && ($previousProfile !== $profile || $usernameChanged)) {
+          // Force RouterOS to recreate dynamic queues when the profile changes, and
+          // revoke a live session keyed by the old username after a secret rename.
           $this->disconnectPppActive($router, $previousUsername ?: $name);
       }
   }
@@ -696,10 +697,12 @@ class RouterOsService {
       throw new RuntimeException("Akun Hotspot '{$username}' tidak terverifikasi secara unik setelah disinkronkan.");
     }
 
-    if ($previous && $previousProfileName !== $profile) {
-      // A profile change does not update an existing dynamic queue until the
-      // active Hotspot session logs in again. Disconnect only this account.
-      $this->disconnectHotspotActive($router, $username);
+    $usernameChanged = filled($previousUsername) && $previousUsername !== $username;
+    if ($previous && ($previousProfileName !== $profile || $usernameChanged)) {
+      // Profile changes refresh the dynamic queue; username changes must revoke
+      // the session still indexed by the previous username in RouterOS.
+      $sessionUsername = $usernameChanged ? (string) $previousUsername : $username;
+      $this->disconnectHotspotActive($router, $sessionUsername);
     }
   }
 
