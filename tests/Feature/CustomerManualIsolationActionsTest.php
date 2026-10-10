@@ -37,7 +37,7 @@ class CustomerManualIsolationActionsTest extends TestCase
         $this->app->instance(IsolationService::class, $isolation);
 
         $this->withSession(['user_id' => $admin->id])
-            ->patch(route('customers.isolate', $customer))
+            ->post(route('customers.isolate', $customer))
             ->assertRedirect(route('customers.show', $customer))
             ->assertSessionHas('success');
     }
@@ -53,7 +53,7 @@ class CustomerManualIsolationActionsTest extends TestCase
         $this->app->instance(IsolationService::class, $isolation);
 
         $this->withSession(['user_id' => $admin->id])
-            ->patch(route('customers.unisolate', $customer))
+            ->post(route('customers.unisolate', $customer))
             ->assertRedirect(route('customers.show', $customer))
             ->assertSessionHas('success');
     }
