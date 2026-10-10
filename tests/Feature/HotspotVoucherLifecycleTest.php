@@ -102,7 +102,7 @@ class HotspotVoucherLifecycleTest extends TestCase
                 && str_starts_with($username, 'WIFI')
                 && strlen($password) === 8
                 && $routerProfile === $profile->routerProfileName()
-                && preg_match('/^VIKSUM:V:\\\\d+$/', $comment) === 1
+                && preg_match('/^VIKSUM:V:\d+$/', $comment) === 1
                 && $validated === true);
         $this->app->instance(RouterOsService::class, $routerOs);
 
