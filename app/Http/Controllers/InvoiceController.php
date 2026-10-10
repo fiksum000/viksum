@@ -63,6 +63,45 @@ class InvoiceController
         return view('invoices.show', compact('invoice', 'paymentChannels', 'activePayment'));
     }
 
+    public function cancel(Invoice $invoice)
+    {
+        $result = DB::transaction(function () use ($invoice): string {
+            $lockedInvoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+
+            if (!in_array($lockedInvoice->status, ['draft', 'unpaid'], true)) {
+                return 'status';
+            }
+
+            // A pending or completed payment attempt may still settle at the gateway.
+            // Do not cancel an invoice once any payment record exists.
+            if ($lockedInvoice->payments()->exists()) {
+                return 'payments';
+            }
+
+            $lockedInvoice->update([
+                'status' => 'cancelled',
+                'payment_url' => null,
+                'payment_reference' => null,
+                'payment_expired_at' => now(),
+            ]);
+
+            return 'cancelled';
+        });
+
+        if ($result === 'status') {
+            return back()->with('error', 'Hanya invoice draft atau belum lunas yang dapat dibatalkan.');
+        }
+        if ($result === 'payments') {
+            return back()->with('error', 'Invoice memiliki riwayat percobaan pembayaran. Selesaikan atau periksa transaksi terlebih dahulu; invoice tidak dibatalkan otomatis.');
+        }
+
+        Audit::log('invoice.cancelled', Invoice::class, $invoice->id, [
+            'invoice_number' => $invoice->invoice_number,
+        ]);
+
+        return back()->with('success', 'Invoice dibatalkan. Riwayat dan data pelanggan tetap tersimpan.');
+    }
+
     public function adjust(Request $request, Invoice $invoice)
     {
         $amounts = $request->validate(['discount' => 'required|integer|min:0', 'penalty' => 'required|integer|min:0']);
