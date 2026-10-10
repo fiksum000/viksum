@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class HotspotController extends Controller
@@ -252,6 +253,86 @@ class HotspotController extends Controller
         return back()->with('success', "{$created} voucher dibuat dari profil billing {$profile->name} dan disinkronkan ke {$profile->router->name}.");
     }
 
+    public function renew(HotspotVoucher $voucher, RouterOsService $routerOs, HotspotVoucherLifecycleService $lifecycle)
+    {
+        $voucher->load(['router', 'hotspotProfile']);
+        $router = $voucher->router;
+        $profile = $voucher->hotspotProfile;
+
+        if (! $voucher->hotspot_profile_id || ! $profile) {
+            return back()->with('error', 'Voucher lama tanpa profil yang dikelola billing tidak dapat diperpanjang otomatis.');
+        }
+        if (! in_array($voucher->status, ['active', 'disabled', 'expired'], true)) {
+            return back()->with('error', 'Hanya voucher aktif, nonaktif, atau kedaluwarsa yang dapat diperpanjang.');
+        }
+        if (! $profile->enabled || ! $profile->validity_value || ! $profile->validity_unit) {
+            return back()->with('error', 'Profil voucher harus aktif dan memiliki masa berlaku sebelum voucher dapat diperpanjang.');
+        }
+        if (! $router || ! $router->enabled) {
+            return back()->with('error', 'Router voucher tidak tersedia atau sedang dinonaktifkan.');
+        }
+        if ($profile->starts_on_first_login && ! $voucher->first_login_at) {
+            return back()->with('error', 'Voucher ini belum pernah login. Masa berlaku akan mulai saat login pertama, jadi belum perlu diperpanjang.');
+        }
+
+        $now = now(config('billing.timezone'));
+        $expired = $voucher->status === 'expired' || ($voucher->expires_at && $voucher->expires_at->lte($now));
+        $base = $voucher->expires_at && $voucher->expires_at->gt($now)
+            ? $voucher->expires_at->copy()
+            : $now->copy();
+        $newExpiry = $lifecycle->addValidity($base, (int) $profile->validity_value, (string) $profile->validity_unit);
+        $expectedComment = $voucher->comment ?: 'VIKSUM:V:'.$voucher->id;
+        $hasFupProfile = (int) $profile->fup_limit_bytes > 0
+            && filled($profile->fup_upload_speed)
+            && filled($profile->fup_download_speed);
+        $keepFup = $voucher->fup_applied && $hasFupProfile;
+        $targetProfile = $profile->routerProfileName().($keepFup ? '-FUP' : '');
+
+        try {
+            $routerOs->syncHotspotProfile($profile->fresh('router'));
+            if ($expired) {
+                // Revoke any stale session before re-enabling a voucher whose validity had ended.
+                $routerOs->disconnectHotspotActive($router, $voucher->username);
+            }
+            $routerOs->createOrUpdateHotspotUser(
+                $router,
+                $voucher->username,
+                $voucher->password,
+                $targetProfile,
+                $expectedComment,
+                $voucher->username,
+                true,
+                $expectedComment,
+            );
+
+            $profile->update(['sync_status' => 'synced', 'sync_error' => null, 'last_synced_at' => now()]);
+            $voucher->update([
+                'expires_at' => $newExpiry,
+                'status' => 'active',
+                'fup_applied' => $keepFup,
+                'sync_status' => 'synced',
+                'sync_error' => null,
+            ]);
+            Audit::log('hotspot.voucher_renewed', HotspotVoucher::class, $voucher->id, [
+                'expires_at' => $newExpiry->toDateTimeString(),
+                'fup_applied' => $keepFup,
+            ]);
+
+            return back()->with('success', 'Voucher diperpanjang sampai '.$newExpiry->timezone(config('billing.timezone'))->format('d/m/Y H:i').'. Pemakaian data dan status FUP yang masih berlaku dipertahankan.');
+        } catch (Throwable $exception) {
+            Log::warning('Hotspot voucher renewal failed', [
+                'voucher_id' => $voucher->id,
+                'router_id' => $router->id,
+                'error' => $exception->getMessage(),
+            ]);
+            $voucher->update([
+                'sync_status' => 'failed',
+                'sync_error' => mb_substr($exception->getMessage(), 0, 2000),
+            ]);
+
+            return back()->with('error', 'Voucher belum diperpanjang. Periksa koneksi, kepemilikan akun, dan sinkronisasi profil MikroTik.');
+        }
+    }
     public function toggle(HotspotVoucher $voucher, RouterOsService $routerOs)
     {
         $expectedComment = $voucher->comment ?: (
