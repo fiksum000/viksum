@@ -10,6 +10,13 @@
         @if(in_array($billingUser?->role,['super_admin','admin','operator'],true))
             <a href="{{ route('customers.edit',$customer) }}" class="btn btn-primary">Edit pelanggan</a>
         @endif
+        @if(in_array($billingUser?->role,['super_admin','admin','operator'],true) && $customer->status !== 'terminated')
+            <form method="POST" action="{{ route('customers.terminate',$customer) }}" onsubmit="return confirm('Hentikan layanan {{ $customer->name }}? Akun layanan akan dinonaktifkan dan sesi aktif diputus, tetapi data serta riwayat tagihan tetap disimpan.');">
+                @csrf
+                @method('PATCH')
+                <button class="btn btn-outline-warning" type="submit">Hentikan layanan</button>
+            </form>
+        @endif
         @if(in_array($billingUser?->role,['super_admin','admin'],true))
             <form method="POST" action="{{ route('customers.destroy',$customer) }}" onsubmit="return confirm('Hapus permanen pelanggan {{ $customer->customer_code }} — {{ $customer->name }}? Jika memiliki riwayat tagihan, penghapusan akan ditolak.');">
                 @csrf
