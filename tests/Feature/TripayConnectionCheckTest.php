@@ -3,8 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Models\PaymentSetting;
 use App\Services\TripayService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Mockery;
 use RuntimeException;
 use Tests\TestCase;
@@ -12,6 +14,37 @@ use Tests\TestCase;
 class TripayConnectionCheckTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_credentials_can_be_checked_before_tripay_checkout_is_enabled(): void
+    {
+        PaymentSetting::query()->create([
+            'tripay_enabled' => false,
+            'tripay_mode' => 'sandbox',
+            'tripay_api_key' => 'test-api-key',
+            'tripay_private_key' => 'test-private-key',
+            'tripay_merchant_code' => 'T0001',
+            'dana_enabled' => false,
+        ]);
+
+        Http::fake([
+            'tripay.co.id/api-sandbox/merchant/payment-channel' => Http::response([
+                'success' => true,
+                'data' => [
+                    ['active' => true, 'code' => 'QRIS', 'name' => 'QRIS'],
+                    ['active' => false, 'code' => 'TEST-INACTIVE', 'name' => 'Inactive'],
+                ],
+            ], 200),
+        ]);
+
+        $channels = app(TripayService::class)->checkConnection();
+
+        $this->assertCount(1, $channels);
+        $this->assertSame('QRIS', $channels[0]['code']);
+        Http::assertSent(fn ($request) =>
+            $request->url() === 'https://tripay.co.id/api-sandbox/merchant/payment-channel'
+            && $request->hasHeader('Authorization', 'Bearer test-api-key')
+        );
+    }
 
     public function test_payment_settings_page_exposes_connection_check_button(): void
     {
