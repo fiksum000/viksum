@@ -63,7 +63,7 @@ class InvoiceController
 
         try {
             ActivatePaidCustomer::dispatch($invoice->id);
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             Log::warning('Paid invoice activation retry could not be queued', [
                 'invoice_id' => $invoice->id,
                 'error' => $exception->getMessage(),
