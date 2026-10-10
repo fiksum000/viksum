@@ -23,6 +23,7 @@ class CustomerManualIsolationActionsTest extends TestCase
             ->assertOk()
             ->assertSee('Isolir')
             ->assertSee(route('customers.isolate', $customer))
+            ->assertSee('Hentikan layanan terlebih dahulu sebelum menghapus permanen.')
             ->assertDontSee('Buka isolir');
 
         $this->assertSame(1, substr_count($response->getContent(), route('customers.isolate', $customer)),
