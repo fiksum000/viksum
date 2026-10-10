@@ -76,6 +76,48 @@ class CustomerConnectionStatusTest extends TestCase
             ->assertSee('Router tidak dapat dibaca');
     }
 
+    public function test_customer_with_invoice_history_cannot_be_permanently_deleted(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Billing history router',
+            'host' => '192.0.2.20',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-history', 'Customer with history', 'terminated');
+        $this->invoice($customer, 'paid');
+        $this->loginAdmin();
+
+        $this->delete(route('customers.destroy', $customer))
+            ->assertRedirect(route('customers.index'))
+            ->assertSessionHas('warning');
+
+        $this->assertDatabaseHas('customers', ['id' => $customer->id]);
+        $this->assertDatabaseHas('invoices', ['customer_id' => $customer->id, 'status' => 'paid']);
+    }
+
+    public function test_customer_detail_page_shows_customer_and_invoice_history(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Customer detail router',
+            'host' => '192.0.2.21',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-detail', 'Customer detail example', 'active');
+        $this->invoice($customer, 'unpaid');
+        $this->loginAdmin();
+
+        $this->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('Detail Pelanggan')
+            ->assertSee('Customer detail example')
+            ->assertSee('Riwayat tagihan terbaru')
+            ->assertSee('unpaid');
+    }
+
     private function customer(Router $router, string $username, string $name, string $status): Customer
     {
         return Customer::query()->create([
