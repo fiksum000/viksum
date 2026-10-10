@@ -91,7 +91,7 @@ class FupService
                     foreach ($bundle['customers'] as $customer) {
                         try {
                             $row = $activeMap[$customer->pppoe_username] ?? null;
-                            if (!$row) {
+                            if (! $row || (($row['service'] ?? 'pppoe') !== 'pppoe')) {
                                 continue;
                             }
 
@@ -171,8 +171,12 @@ class FupService
                             if ($fupEnabled && $limit > 0 && $newTotal >= $limit
                                 && !$state->limited && filled($limitedProfile)) {
                                 $normalProfile = $customer->pppoe_profile_normal ?: $customer->package?->normal_profile;
-                                $this->routerOs->setPppProfile($router, $customer->pppoe_username, $limitedProfile);
-                                $this->routerOs->disconnectPppActive($router, $customer->pppoe_username);
+                                $this->routerOs->setPppProfileIfCurrentProfile(
+                                    $router,
+                                    $customer->pppoe_username,
+                                    $this->expectedProfiles($customer),
+                                    $limitedProfile,
+                                );
                                 $this->rememberSecretProfile($secretMaps, $routerId, $customer->pppoe_username, $limitedProfile);
                                 $state->update(['limited' => true]);
                                 $this->logFup(
@@ -192,8 +196,12 @@ class FupService
                                 && $newTotal >= $limit && filled($limitedProfile)) {
                                 $currentSecret = $secretMaps[$routerId]->get($customer->pppoe_username);
                                 if (($currentSecret['profile'] ?? null) !== $limitedProfile) {
-                                    $this->routerOs->setPppProfile($router, $customer->pppoe_username, $limitedProfile);
-                                    $this->routerOs->disconnectPppActive($router, $customer->pppoe_username);
+                                    $this->routerOs->setPppProfileIfCurrentProfile(
+                                        $router,
+                                        $customer->pppoe_username,
+                                        $this->expectedProfiles($customer),
+                                        $limitedProfile,
+                                    );
                                     $this->rememberSecretProfile($secretMaps, $routerId, $customer->pppoe_username, $limitedProfile);
                                 }
                             }
@@ -422,8 +430,28 @@ class FupService
             throw new RuntimeException('Router, username PPPoE, atau profil normal belum dikonfigurasi.');
         }
 
-        $this->routerOs->setPppProfile($customer->router, $customer->pppoe_username, $normalProfile);
-        $this->routerOs->disconnectPppActive($customer->router, $customer->pppoe_username);
+        $this->routerOs->setPppProfileIfCurrentProfile(
+            $customer->router,
+            $customer->pppoe_username,
+            $this->expectedProfiles($customer),
+            $normalProfile,
+        );
+    }
+
+    /**
+     * Only move FUP between profiles known to this customer/package. A manual or
+     * third-party PPP profile is never overwritten by the scheduled collector.
+     */
+    private function expectedProfiles(Customer $customer): array
+    {
+        return array_values(array_unique(array_filter([
+            $customer->pppoe_profile_normal,
+            $customer->fup_speed_after,
+            $customer->package?->normal_profile,
+            $customer->package?->fup_speed_after,
+            $customer->package?->legacy_normal_profile,
+            $customer->package?->legacy_fup_profile,
+        ], fn ($profile) => is_string($profile) && trim($profile) !== '')));
     }
 
     private function logFup(
