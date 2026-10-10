@@ -134,6 +134,29 @@ class CustomerConnectionStatusTest extends TestCase
         $this->assertDatabaseHas('customers', ['id' => $customer->id, 'status' => 'active']);
     }
 
+    public function test_customer_list_disables_permanent_delete_when_invoice_history_exists(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Archived customer router',
+            'host' => '192.0.2.27',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-archived-history', 'Archived customer with invoices', 'terminated');
+        $this->invoice($customer, 'paid');
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('activePppMap')->once()->andReturn([]);
+        $routerOs->shouldReceive('listHotspotActive')->once()->andReturn([]);
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->get(route('customers.index'))
+            ->assertOk()
+            ->assertSee('Pelanggan memiliki riwayat tagihan; jangan hapus permanen.', false);
+    }
+
     public function test_customer_with_invoice_history_cannot_be_permanently_deleted(): void
     {
         $router = Router::query()->create([
