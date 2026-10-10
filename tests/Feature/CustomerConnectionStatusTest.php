@@ -231,6 +231,37 @@ class CustomerConnectionStatusTest extends TestCase
             ->assertSee(route('invoices.show', $invoice));
     }
 
+    public function test_terminating_pppoe_customer_disconnects_stale_session_when_secret_is_missing(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Missing secret termination router',
+            'host' => '192.0.2.26',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-stale-session', 'Missing secret customer', 'active');
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('findPppSecret')->once()
+            ->withArgs(fn ($actualRouter, $username) =>
+                $actualRouter->id === $router->id && $username === 'ppp-stale-session')
+            ->andReturn([]);
+        $routerOs->shouldNotReceive('enablePppSecret');
+        $routerOs->shouldReceive('disconnectPppActive')->once()
+            ->withArgs(fn ($actualRouter, $username) =>
+                $actualRouter->id === $router->id && $username === 'ppp-stale-session');
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->withSession(['user_id' => User::where('email', 'admin@example.test')->value('id')])
+            ->patch(route('customers.terminate', $customer))
+            ->assertRedirect(route('customers.show', $customer))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'status' => 'terminated']);
+    }
+
     public function test_terminating_pppoe_customer_disables_secret_and_disconnects_session(): void
     {
         $router = Router::query()->create([
