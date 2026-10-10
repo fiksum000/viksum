@@ -190,7 +190,7 @@ class CustomerController extends Controller
 
             return redirect()->route('customers.show', $customer)
                 ->with('success', 'Pelanggan berhasil diisolir dan sesi aktif diputus.');
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             Log::warning('Manual customer isolation failed', [
                 'customer_id' => $customer->id,
                 'router_id' => $customer->router_id,
@@ -215,7 +215,7 @@ class CustomerController extends Controller
 
             return redirect()->route('customers.show', $customer)
                 ->with('success', 'Isolir dibuka. Profil normal atau FUP yang sesuai telah dipulihkan.');
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             Log::warning('Manual customer unisolation failed', [
                 'customer_id' => $customer->id,
                 'router_id' => $customer->router_id,
@@ -319,7 +319,7 @@ class CustomerController extends Controller
         try {
             $isolation->isolate($customer);
             return redirect()->route('customers.show', $customer)->with('success', 'Pelanggan berhasil diisolir.');
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             report($exception);
             return redirect()->route('customers.show', $customer)->with('error', 'Isolir gagal diterapkan. Status pelanggan tidak boleh dianggap berubah; periksa koneksi dan log MikroTik.');
         }
@@ -330,7 +330,7 @@ class CustomerController extends Controller
         try {
             $isolation->unisolate($customer);
             return redirect()->route('customers.show', $customer)->with('success', 'Permintaan buka isolir berhasil diproses.');
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             report($exception);
             return redirect()->route('customers.show', $customer)->with('error', 'Buka isolir gagal. Periksa koneksi dan log MikroTik sebelum mencoba kembali.');
         }
