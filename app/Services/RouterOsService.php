@@ -361,6 +361,33 @@ class RouterOsService {
       ->equal('disabled', $enabled ? 'no' : 'yes'))->read();
   }
 
+  public function setManagedHotspotUserEnabled(
+    Router $router,
+    string $username,
+    bool $enabled,
+    string $expectedComment,
+  ): void {
+    $client = $this->client($router);
+    $rows = $client->query((new Query('/ip/hotspot/user/print'))->where('name', $username))->read();
+    $matches = collect($rows)->filter(fn (array $row) => ($row['name'] ?? null) === $username)->values();
+
+    if ($matches->count() !== 1 || ! isset($matches[0]['.id'])) {
+      throw new RuntimeException("Akun Hotspot '{$username}' tidak ditemukan secara unik di router.");
+    }
+
+    $actualComment = (string) ($matches[0]['comment'] ?? '');
+    $owned = $actualComment === $expectedComment
+      || (str_starts_with($expectedComment, 'VIKSUM:V:')
+        && str_starts_with($actualComment, $expectedComment.'|FIRST='));
+    if (! $owned) {
+      throw new RuntimeException("Akun Hotspot '{$username}' tidak memiliki penanda kepemilikan yang cocok; status tidak diubah.");
+    }
+
+    $client->query((new Query('/ip/hotspot/user/set'))
+      ->equal('.id', $matches[0]['.id'])
+      ->equal('disabled', $enabled ? 'no' : 'yes'))->read();
+  }
+
   public function disconnectHotspotActive(Router $router, string $username): void
   {
     $client = $this->client($router);
