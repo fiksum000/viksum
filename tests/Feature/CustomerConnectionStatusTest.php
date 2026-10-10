@@ -89,7 +89,7 @@ class CustomerConnectionStatusTest extends TestCase
 
         $routerOs = Mockery::mock(RouterOsService::class);
         $routerOs->shouldReceive('findPppSecret')->once()
-            ->andThrow(new \\RuntimeException('sensitive-router-api-response-details'));
+            ->andThrow(new \RuntimeException('sensitive-router-api-response-details'));
         $this->app->instance(RouterOsService::class, $routerOs);
         $this->loginAdmin();
 
