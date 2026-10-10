@@ -66,6 +66,88 @@ class FupServiceSafetyTest extends TestCase
         ]);
     }
 
+    public function test_collector_applies_the_fup_profile_only_once_when_the_limit_is_first_reached(): void
+    {
+        config(['billing.timezone' => 'Asia/Jakarta']);
+        Carbon::setTestNow(Carbon::parse('2026-10-10 12:00:00', 'Asia/Jakarta'));
+
+        $router = Router::query()->create([
+            'name' => 'Active FUP router',
+            'host' => '192.0.2.61',
+            'port' => 8728,
+            'username' => 'active-fup-test',
+            'password' => 'test-only-password',
+            'enabled' => true,
+        ]);
+        $package = Package::query()->create([
+            'name' => 'Active FUP package',
+            'price' => 50000,
+            'router_id' => $router->id,
+            'normal_profile' => 'VIKSUM-PPP-78',
+            'fup_speed_after' => 'VIKSUM-PPP-78-FUP',
+            'fup_enabled' => true,
+            'fup_limit_bytes' => 1000,
+        ]);
+        $customer = Customer::query()->create([
+            'customer_code' => 'FUP-ACTIVE-001',
+            'name' => 'Active FUP customer',
+            'service_type' => 'pppoe',
+            'status' => 'active',
+            'due_day' => 20,
+            'router_id' => $router->id,
+            'package_id' => $package->id,
+            'pppoe_username' => 'fup-active-user',
+            'pppoe_profile_normal' => $package->normal_profile,
+            'fup_speed_after' => $package->fup_speed_after,
+        ]);
+        $state = FupState::query()->create([
+            'customer_id' => $customer->id,
+            'period' => app(FupService::class)->currentPeriod(),
+            'last_rx' => 0,
+            'last_tx' => 0,
+            'total_bytes' => 0,
+            'limited' => false,
+            'last_sampled_at' => now()->subMinutes(5),
+            'last_session_id' => '*active-fup',
+        ]);
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('activePppMap')
+            ->once()
+            ->withArgs(fn (Router $actualRouter) => $actualRouter->id === $router->id)
+            ->andReturn([
+                'fup-active-user' => [
+                    '.id' => '*active-fup',
+                    'name' => 'fup-active-user',
+                    'service' => 'pppoe',
+                    'bytes-in' => 1200,
+                    'bytes-out' => 800,
+                ],
+            ]);
+        $routerOs->shouldReceive('listPppSecrets')
+            ->once()
+            ->andReturn([[
+                '.id' => '*secret-fup-active',
+                'name' => 'fup-active-user',
+                'profile' => $package->normal_profile,
+            ]]);
+        $routerOs->shouldReceive('setPppProfile')
+            ->once()
+            ->withArgs(fn (Router $actualRouter, string $username, string $profile) =>
+                $actualRouter->id === $router->id
+                && $username === 'fup-active-user'
+                && $profile === $package->fup_speed_after);
+        $routerOs->shouldReceive('disconnectPppActive')
+            ->once()
+            ->with($router, 'fup-active-user');
+        $this->app->instance(RouterOsService::class, $routerOs);
+
+        app(FupService::class)->collect();
+
+        $this->assertTrue($state->fresh()->limited);
+        $this->assertSame(2000, $state->fresh()->total_bytes);
+    }
+
     private function isolatedCustomerWithFupState(string $period): array
     {
         $router = Router::query()->create([
