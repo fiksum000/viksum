@@ -50,7 +50,7 @@ class FupService
                             ->whereHas('package', fn ($package) => $package->where('fup_enabled', true));
                     });
             })
-            ->chunkById(50, function ($customers) use ($period, &$count, &$activeMaps): void {
+            ->chunkById(50, function ($customers) use ($period, &$count, &$activeMaps, &$secretMaps): void {
                 $byRouter = [];
                 foreach ($customers as $customer) {
                     $byRouter[$customer->router_id]['router'] = $customer->router;
