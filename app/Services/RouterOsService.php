@@ -327,11 +327,21 @@ class RouterOsService {
       }
     }
 
+    // Preserve a first-login marker if the scheduled worker has not yet copied it
+    // into the billing database at the moment of a manual resync.
+    $commentToWrite = $comment;
+    if ($previous
+      && $expectedPreviousComment !== null
+      && str_starts_with($expectedPreviousComment, 'VIKSUM:V:')
+      && str_starts_with((string) ($previous['comment'] ?? ''), $expectedPreviousComment.'|FIRST=')) {
+      $commentToWrite = (string) $previous['comment'];
+    }
+
     $query = new Query($previous ? '/ip/hotspot/user/set' : '/ip/hotspot/user/add');
     $query->equal('name', $username)
       ->equal('password', $password)
       ->equal('profile', $profile)
-      ->equal('comment', $comment)
+      ->equal('comment', $commentToWrite)
       ->equal('disabled', $enabled ? 'no' : 'yes');
 
     if ($previous) {
