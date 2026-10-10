@@ -29,6 +29,7 @@ Route::middleware('auth.session')->group(function (): void {
 
     Route::middleware('role:super_admin,admin,operator,technician')->group(function (): void {
         Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
+        Route::get('/customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
         Route::get('/customers/traffic', CustomerTrafficController::class)->middleware('throttle:30,1')->name('customers.traffic');
     });
 
