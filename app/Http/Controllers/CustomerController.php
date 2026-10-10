@@ -377,12 +377,18 @@ class CustomerController extends Controller
                     $routerOs->disconnectPppActive($router, $username);
                 }
             } elseif (filled($username) && $router && $customer->service_type === 'hotspot') {
-                $routerOs->setManagedHotspotUserEnabled(
-                    $router,
-                    $username,
-                    false,
-                    'Billing customer '.$customer->customer_code,
-                );
+                if ($customer->hotspot_profile_id) {
+                    $routerOs->setManagedHotspotUserEnabled(
+                        $router,
+                        $username,
+                        false,
+                        'Billing customer '.$customer->customer_code,
+                    );
+                } else {
+                    // Imported/legacy Hotspot users have no billing ownership marker.
+                    // Match the legacy isolation path and still require a unique username in RouterOS.
+                    $routerOs->setHotspotUserEnabled($router, $username, false);
+                }
                 $routerOs->disconnectHotspotActive($router, $username);
             }
 
