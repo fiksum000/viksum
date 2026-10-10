@@ -92,6 +92,9 @@ class TripayWebhookController
                 }
 
                 $payment = Payment::where('reference', $reference)->lockForUpdate()->first();
+                if ($invoice->status === 'paid' && (!$payment || $payment->invoice_id !== $invoice->id || $payment->provider !== 'tripay' || $payment->status !== 'paid')) {
+                    throw new \RuntimeException('Invoice already settled through another method; callback requires manual reconciliation');
+                }
                 if ($payment && $payment->invoice_id !== $invoice->id) {
                     throw new \RuntimeException('Payment reference belongs to another invoice');
                 }
