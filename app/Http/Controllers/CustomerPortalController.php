@@ -83,7 +83,9 @@ class CustomerPortalController extends Controller
     public function logout(Request $request)
     {
         Audit::log('portal.logout', Customer::class, $request->session()->get('customer_id'));
-        $request->session()->forget('customer_id');
+        // Invalidate the complete session on logout, not only the portal identity.
+        // This clears any stale session data and rotates the session ID against fixation.
+        $request->session()->invalidate();
         $request->session()->regenerateToken();
         return redirect()->route('portal.login');
     }
