@@ -402,7 +402,7 @@ class CustomerController extends Controller
             ]);
 
             return redirect()->route('customers.show', $customer)
-                ->with('warning', 'Layanan belum dihentikan: '.$exception->getMessage());
+                ->with('warning', 'Layanan belum dihentikan. Periksa koneksi router dan log aplikasi.');
         }
     }
 
