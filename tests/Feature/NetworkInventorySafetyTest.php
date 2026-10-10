@@ -100,6 +100,12 @@ class NetworkInventorySafetyTest extends TestCase
         ]);
 
         $this->withSession(['user_id' => $admin->id])
+            ->get(route('olts.index'))
+            ->assertOk()
+            ->assertSee('Hanya bisa dilakukan jika tidak ada ONU yang tercatat')
+            ->assertDontSee('Hapus OLT dan semua ONU terkait?');
+
+        $this->withSession(['user_id' => $admin->id])
             ->delete(route('olts.destroy', $olt))
             ->assertRedirect()
             ->assertSessionHas('warning');
