@@ -69,18 +69,14 @@ class HotspotVoucherLifecycleTest extends TestCase
         $router = $this->router();
         $admin = $this->loginAdmin();
 
+        $profile = $this->profile($router, 'Missing package');
         $routerOs = Mockery::mock(RouterOsService::class);
-        $routerOs->shouldReceive('assertHotspotProfileExists')
-            ->once()
-            ->withArgs(fn ($actualRouter, $profile) => $actualRouter->id === $router->id && $profile === 'missing-profile')
-            ->andThrow(new \RuntimeException('profile not found'));
         $routerOs->shouldReceive('createHotspotUser')->never();
         $this->app->instance(RouterOsService::class, $routerOs);
 
         $this->withSession(['user_id' => $admin->id])
             ->post(route('hotspot.generate'), [
-                'router_id' => $router->id,
-                'profile' => 'missing-profile',
+                'profile_id' => $profile->id,
                 'quantity' => 3,
                 'prefix' => 'WIFI',
             ])
@@ -95,25 +91,22 @@ class HotspotVoucherLifecycleTest extends TestCase
         $router = $this->router();
         $admin = $this->loginAdmin();
 
+        $profile = $this->profile($router, 'hs-normal');
         $routerOs = Mockery::mock(RouterOsService::class);
-        $routerOs->shouldReceive('assertHotspotProfileExists')
-            ->once()
-            ->withArgs(fn ($actualRouter, $profile) => $actualRouter->id === $router->id && $profile === 'hs-normal');
         $routerOs->shouldReceive('createHotspotUser')
             ->twice()
-            ->withArgs(fn ($actualRouter, $username, $password, $profile, $comment, $validated) =>
+            ->withArgs(fn ($actualRouter, $username, $password, $routerProfile, $comment, $validated) =>
                 $actualRouter->id === $router->id
                 && str_starts_with($username, 'WIFI')
                 && strlen($password) === 8
-                && $profile === 'hs-normal'
-                && $comment === 'Billing voucher'
+                && $routerProfile === $profile->routerProfileName()
+                && preg_match('/^VIKSUM:V:\\\\d+$/', $comment) === 1
                 && $validated === true);
         $this->app->instance(RouterOsService::class, $routerOs);
 
         $this->withSession(['user_id' => $admin->id])
             ->post(route('hotspot.generate'), [
-                'router_id' => $router->id,
-                'profile' => 'hs-normal',
+                'profile_id' => $profile->id,
                 'quantity' => 2,
                 'prefix' => 'WIFI',
             ])
@@ -132,6 +125,20 @@ class HotspotVoucherLifecycleTest extends TestCase
             'username' => 'billing-hotspot-test',
             'password' => 'test-only-password',
             'enabled' => true,
+        ]);
+    }
+
+    private function profile(Router $router, string $name): HotspotProfile
+    {
+        return HotspotProfile::query()->create([
+            'router_id' => $router->id,
+            'name' => $name,
+            'download_speed' => '10M',
+            'upload_speed' => '2M',
+            'shared_users' => 1,
+            'starts_on_first_login' => true,
+            'enabled' => true,
+            'sync_status' => 'synced',
         ]);
     }
 
