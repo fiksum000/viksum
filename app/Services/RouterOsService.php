@@ -664,6 +664,8 @@ class RouterOsService {
       }
     }
 
+    $previousProfileName = $previous['profile'] ?? null;
+
     // Preserve a first-login marker if the scheduled worker has not yet copied it
     // into the billing database at the moment of a manual resync.
     $commentToWrite = $comment;
@@ -687,9 +689,17 @@ class RouterOsService {
 
     $client->query($query)->read();
 
-    $verified = $client->query((new Query('/ip/hotspot/user/print'))->where('name', $username))->read();
-    if (! collect($verified)->contains(fn (array $row) => ($row['name'] ?? null) === $username)) {
-      throw new RuntimeException("Akun Hotspot '{$username}' tidak terverifikasi setelah disinkronkan.");
+    $verified = collect($client->query((new Query('/ip/hotspot/user/print'))->where('name', $username))->read())
+      ->filter(fn (array $row) => ($row['name'] ?? null) === $username)
+      ->values();
+    if ($verified->count() !== 1 || ! isset($verified[0]['.id'])) {
+      throw new RuntimeException("Akun Hotspot '{$username}' tidak terverifikasi secara unik setelah disinkronkan.");
+    }
+
+    if ($previous && $previousProfileName !== $profile) {
+      // A profile change does not update an existing dynamic queue until the
+      // active Hotspot session logs in again. Disconnect only this account.
+      $this->disconnectHotspotActive($router, $username);
     }
   }
 
