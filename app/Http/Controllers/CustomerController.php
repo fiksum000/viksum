@@ -173,7 +173,7 @@ class CustomerController extends Controller
             ->with('portal_password_created', $password);
     }
 
-    public function show(Customer $customer)
+    public function show(Request $request, Customer $customer)
     {
         $customer->load([
             'package',
@@ -188,7 +188,10 @@ class CustomerController extends Controller
             ->where('period', app(FupService::class)->currentPeriod())
             ->first();
 
-        return view('customers.show', compact('customer', 'fupState'));
+        // Reveal a newly generated portal password once only, then consume the flash value.
+        $portalPasswordCreated = $request->session()->pull('portal_password_created');
+
+        return view('customers.show', compact('customer', 'fupState', 'portalPasswordCreated'));
     }
 
     public function isolate(Customer $customer, IsolationService $isolation)
@@ -496,7 +499,7 @@ class CustomerController extends Controller
             ]);
 
             return redirect()->route('customers.index')
-                ->with('warning', 'Pelanggan belum dihapus: '.$exception->getMessage());
+                ->with('warning', 'Pelanggan belum dihapus. Periksa status layanan, koneksi router, dan log aplikasi.');
         }
     }
 
