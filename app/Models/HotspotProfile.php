@@ -37,6 +37,15 @@ class HotspotProfile extends Model
         'last_synced_at' => 'datetime',
     ];
 
+    /**
+     * RouterOS profile names are namespaced so this application never silently
+     * overwrites a pre-existing profile such as "default".
+     */
+    public function routerProfileName(): string
+    {
+        return 'VIKSUM-HS-'.$this->getKey();
+    }
+
     public function router(): BelongsTo
     {
         return $this->belongsTo(Router::class);
