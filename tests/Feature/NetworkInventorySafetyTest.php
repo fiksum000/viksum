@@ -159,6 +159,84 @@ class NetworkInventorySafetyTest extends TestCase
         $this->assertSame(1, Onu::query()->where('customer_id', $customer->id)->count());
     }
 
+    public function test_onu_inventory_supports_edit_and_delete_actions(): void
+    {
+        $admin = $this->loginAdmin();
+        $olt = Olt::query()->create([
+            'name' => 'ONU actions OLT',
+            'management_protocol' => 'manual',
+            'enabled' => true,
+            'status' => 'unknown',
+        ]);
+        $customer = Customer::query()->create([
+            'customer_code' => 'ONU-ACTIONS-CUSTOMER',
+            'name' => 'ONU actions customer',
+            'service_type' => 'pppoe',
+            'status' => 'active',
+            'due_day' => 20,
+        ]);
+        $onu = Onu::query()->create([
+            'olt_id' => $olt->id,
+            'name' => 'ONU old name',
+            'pon_port' => '1/1/1',
+            'onu_id' => '4',
+            'serial_number' => 'ONU-ACTIONS-SN',
+            'status' => 'unknown',
+        ]);
+
+        $this->withSession(['user_id' => $admin->id])
+            ->get(route('onus.index'))
+            ->assertOk()
+            ->assertSee('Edit')
+            ->assertSee(route('onus.update', $onu));
+
+        $this->withSession(['user_id' => $admin->id])
+            ->put(route('onus.update', $onu), [
+                'olt_id' => $olt->id,
+                'customer_id' => $customer->id,
+                'name' => 'ONU updated name',
+                'pon_port' => '1/1/2',
+                'onu_id' => '5',
+                'serial_number' => 'ONU-ACTIONS-SN-UPDATED',
+                'mac_address' => 'AA:BB:CC:DD:EE:FF',
+                'rx_power' => -21.5,
+                'tx_power' => 2.1,
+                'temperature' => 38,
+                'uptime' => '1d2h',
+                'status' => 'online',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('onus', [
+            'id' => $onu->id,
+            'name' => 'ONU updated name',
+            'customer_id' => $customer->id,
+            'pon_port' => '1/1/2',
+            'onu_id' => '5',
+        ]);
+        $this->assertDatabaseHas('customers', [
+            'id' => $customer->id,
+            'pon_port' => '1/1/2',
+            'onu_id' => '5',
+            'onu_sn' => 'ONU-ACTIONS-SN-UPDATED',
+        ]);
+
+        $this->withSession(['user_id' => $admin->id])
+            ->delete(route('onus.destroy', $onu))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('onus', ['id' => $onu->id]);
+        $this->assertDatabaseHas('customers', [
+            'id' => $customer->id,
+            'olt_id' => null,
+            'pon_port' => null,
+            'onu_id' => null,
+            'onu_sn' => null,
+        ]);
+    }
+
     private function loginAdmin(): User
     {
         $user = User::query()->create([
