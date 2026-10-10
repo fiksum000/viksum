@@ -357,8 +357,25 @@ class HotspotController extends Controller
             return back()->with('error', 'Profil atau router voucher tidak tersedia; sinkronisasi ulang voucher lama perlu profil pengganti.');
         }
         if ($voucher->status === 'expired' || ($voucher->expires_at && $voucher->expires_at->lte(now(config('billing.timezone'))))) {
-            $voucher->update(['status' => 'expired']);
-            return back()->with('error', 'Voucher sudah kedaluwarsa; sinkronisasi ditolak.');
+            $expectedComment = $voucher->comment ?: 'VIKSUM:V:'.$voucher->id;
+            try {
+                $routerOs->setManagedHotspotUserEnabled(
+                    $voucher->router,
+                    $voucher->username,
+                    false,
+                    $expectedComment,
+                );
+                $routerOs->disconnectHotspotActive($voucher->router, $voucher->username);
+                $voucher->update(['status' => 'expired', 'sync_status' => 'synced', 'sync_error' => null]);
+                return back()->with('error', 'Voucher kedaluwarsa; akun MikroTik sudah dinonaktifkan dan sesi diputus.');
+            } catch (Throwable $exception) {
+                report($exception);
+                $voucher->update([
+                    'sync_status' => 'failed',
+                    'sync_error' => mb_substr($exception->getMessage(), 0, 2000),
+                ]);
+                return back()->with('error', 'Voucher sudah kedaluwarsa, tetapi penonaktifan MikroTik gagal. Periksa status sinkronisasi.');
+            }
         }
 
         try {
