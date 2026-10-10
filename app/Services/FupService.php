@@ -220,7 +220,7 @@ class FupService
                     }
 
                     try {
-                        if ($customer->status === 'active') {
+                        if ($customer->status === 'active' && $customer->service_type === 'pppoe') {
                             $this->restoreNormalProfile($customer);
                             $this->logFup(
                                 $customer,
@@ -229,10 +229,11 @@ class FupService
                                 (int) $state->total_bytes,
                                 $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
                                 $customer->pppoe_profile_normal ?: $customer->package?->normal_profile,
-                                'Periode FUP selesai; profil normal dipulihkan',
+                                'Periode FUP selesai; profil normal PPP dipulihkan',
                             );
                         } else {
-                            // Do not replace an isolation profile with the normal profile.
+                            // FUP collection is PPPoE-only. Never attempt PPP commands
+                            // for a Hotspot customer or replace an inactive customer's isolation profile.
                             $this->logFup(
                                 $customer,
                                 $state->period,
@@ -240,7 +241,7 @@ class FupService
                                 (int) $state->total_bytes,
                                 $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
                                 null,
-                                'Periode FUP selesai; akun tidak aktif sehingga profil router tidak disentuh',
+                                'Periode FUP selesai; layanan non-PPPoE atau tidak aktif sehingga profil router tidak disentuh',
                             );
                         }
 
@@ -268,6 +269,12 @@ class FupService
                 foreach ($states as $state) {
                     $customer = $state->customer;
                     if (!$customer) {
+                        continue;
+                    }
+
+                    // A customer changed from PPPoE to Hotspot no longer uses PPP FUP state.
+                    if ($customer->service_type !== 'pppoe') {
+                        $state->update(['limited' => false]);
                         continue;
                     }
 
@@ -343,22 +350,21 @@ class FupService
 
                     if ($state->limited && $customer) {
                         try {
-                            if ($customer->status === 'active') {
+                            if ($customer->status === 'active' && $customer->service_type === 'pppoe') {
                                 $this->restoreNormalProfile($customer);
                             }
 
+                            $restoreProfile = $customer->status === 'active' && $customer->service_type === 'pppoe';
                             $this->logFup(
                                 $customer,
                                 $state->period,
                                 'reset',
                                 (int) $state->total_bytes,
                                 $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
-                                $customer->status === 'active'
-                                    ? ($customer->pppoe_profile_normal ?: $customer->package?->normal_profile)
-                                    : null,
-                                $customer->status === 'active'
-                                    ? 'Kuota FUP direset; profil normal dipulihkan'
-                                    : 'Kuota FUP direset; profil router tidak disentuh karena layanan tidak aktif',
+                                $restoreProfile ? ($customer->pppoe_profile_normal ?: $customer->package?->normal_profile) : null,
+                                $restoreProfile
+                                    ? 'Kuota FUP PPP direset; profil normal dipulihkan'
+                                    : 'Kuota FUP direset; profil router tidak disentuh karena layanan non-PPPoE atau tidak aktif',
                             );
                         } catch (Throwable $exception) {
                             report($exception);
@@ -383,6 +389,9 @@ class FupService
 
     private function restoreNormalProfile(Customer $customer): void
     {
+        if ($customer->service_type !== 'pppoe') {
+            throw new RuntimeException('Profil FUP hanya berlaku untuk layanan PPPoE.');
+        }
         if ($customer->status !== 'active') {
             throw new RuntimeException('Profil normal tidak dipulihkan karena status layanan pelanggan bukan aktif.');
         }
