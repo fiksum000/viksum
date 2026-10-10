@@ -204,10 +204,17 @@ class CustomerController extends Controller
                 : null;
             $this->syncHotspotUser($customer, $routerOs, $previousHotspotUsernameOnSelectedRouter);
 
-            if ($customer->status !== 'trial' && $previousRouter && $previousServiceType === 'pppoe'
+            if ($previousRouter && $previousServiceType === 'pppoe'
                 && ($customer->service_type !== 'pppoe' || $previousRouter->id !== $customer->router_id || $previousUsername !== $customer->pppoe_username)
                 && $previousUsername) {
-                $routerOs->deletePppSecret($previousRouter, $previousUsername);
+                if ($customer->status === 'trial') {
+                    // A trial record must not leave the old PPP session working even
+                    // when the customer changes service type or router at the same time.
+                    $routerOs->enablePppSecret($previousRouter, $previousUsername, false);
+                    $routerOs->disconnectPppActive($previousRouter, $previousUsername);
+                } else {
+                    $routerOs->deletePppSecret($previousRouter, $previousUsername);
+                }
             }
 
             // If the customer moved off Hotspot or to another router, revoke the old account
