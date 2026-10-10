@@ -82,6 +82,10 @@ class TripayWebhookController
                     throw new \RuntimeException('Invoice not found');
                 }
 
+                if ($invoice->status === 'cancelled') {
+                    throw new \\RuntimeException('Invoice has been cancelled; callback requires manual reconciliation');
+                }
+
                 $amount = (int) ($data['total_amount'] ?? 0);
                 if ($amount !== (int) $invoice->total) {
                     throw new \RuntimeException('Callback amount does not match invoice total');
