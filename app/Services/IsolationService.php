@@ -90,16 +90,16 @@ class IsolationService
             $fupEnabled = $customer->fup_override !== null
                 ? (bool) $customer->fup_override
                 : ((bool) $customer->fup_enabled || (bool) $customer->package?->fup_enabled);
-            $fupProfile = $customer->fup_override === true && filled($customer->fup_speed_after)
+            $fupProfile = filled($customer->fup_speed_after)
+                && ($customer->fup_override === true || ($customer->fup_override === null && $customer->fup_enabled))
                 ? $customer->fup_speed_after
                 : $customer->package?->fup_speed_after;
             $targetProfile = $state?->limited && $fupEnabled && filled($fupProfile)
                 ? $fupProfile
                 : $normalProfile;
 
-            if (config('billing.isolation_method') === 'profile' || config('billing.isolation_method') !== 'disable') {
-                $this->routerOs->setPppProfile($router, $customer->pppoe_username, $targetProfile);
-            }
+            // Set the correct profile before enabling the secret, regardless of isolation mode.
+            $this->routerOs->setPppProfile($router, $customer->pppoe_username, $targetProfile);
             $this->routerOs->enablePppSecret($router, $customer->pppoe_username, true);
         } elseif ($customer->service_type === 'hotspot') {
             if (blank($customer->hotspot_username)) {
