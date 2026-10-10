@@ -106,12 +106,12 @@ class InvoiceController
     {
         $amounts = $request->validate(['discount' => 'required|integer|min:0', 'penalty' => 'required|integer|min:0']);
         if ($invoice->status !== 'unpaid') return back()->with('error', 'Hanya invoice belum lunas yang dapat disesuaikan.');
-        if ($invoice->payments()->where('provider', 'tripay')->exists()) return back()->with('error', 'Invoice sudah memiliki transaksi Tripay. Buat penyesuaian sebelum membuat checkout baru.');
+        if ($invoice->payments()->where('provider', 'tripay')->exists() || filled($invoice->payment_reference) || filled($invoice->payment_url)) return back()->with('error', 'Invoice sudah memiliki percobaan checkout atau transaksi Tripay. Periksa transaksi terlebih dahulu sebelum mengubah nominal.');
         if ($amounts['discount'] > $invoice->subtotal) return back()->with('error', 'Diskon tidak boleh melebihi subtotal.');
 
         $updated = DB::transaction(function () use ($invoice, $amounts): bool {
             $lockedInvoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
-            if ($lockedInvoice->status !== 'unpaid' || $amounts['discount'] > $lockedInvoice->subtotal || $lockedInvoice->payments()->where('provider', 'tripay')->exists()) return false;
+            if ($lockedInvoice->status !== 'unpaid' || $amounts['discount'] > $lockedInvoice->subtotal || $lockedInvoice->payments()->where('provider', 'tripay')->exists() || filled($lockedInvoice->payment_reference) || filled($lockedInvoice->payment_url)) return false;
             $lockedInvoice->update($amounts + ['total' => $lockedInvoice->subtotal - $amounts['discount'] + $lockedInvoice->tax_amount + $amounts['penalty']]);
             return true;
         });
