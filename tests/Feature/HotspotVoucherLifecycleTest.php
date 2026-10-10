@@ -1,14 +1,14 @@
 <?php
 
-namespace Tests\\Feature;
+namespace Tests\Feature;
 
-use App\\Models\\HotspotVoucher;
-use App\\Models\\Router;
-use App\\Models\\User;
-use App\\Services\\RouterOsService;
-use Illuminate\\Foundation\\Testing\\RefreshDatabase;
+use App\Models\HotspotVoucher;
+use App\Models\Router;
+use App\Models\User;
+use App\Services\RouterOsService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
-use Tests\\TestCase;
+use Tests\TestCase;
 
 class HotspotVoucherLifecycleTest extends TestCase
 {
@@ -73,7 +73,7 @@ class HotspotVoucherLifecycleTest extends TestCase
         $routerOs->shouldReceive('assertHotspotProfileExists')
             ->once()
             ->withArgs(fn ($actualRouter, $profile) => $actualRouter->id === $router->id && $profile === 'missing-profile')
-            ->andThrow(new \\RuntimeException('profile not found'));
+            ->andThrow(new \RuntimeException('profile not found'));
         $routerOs->shouldReceive('createHotspotUser')->never();
         $this->app->instance(RouterOsService::class, $routerOs);
 
