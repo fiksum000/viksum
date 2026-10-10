@@ -23,19 +23,58 @@ class HotspotController extends Controller
 
     public function generate(Request $request, RouterOsService $routerOs)
     {
-        $data = $request->validate(['router_id' => 'required|exists:routers,id', 'profile' => 'required|string|max:120', 'quantity' => 'required|integer|min:1|max:200', 'prefix' => 'nullable|string|alpha_dash|max:12']);
+        $data = $request->validate([
+            'router_id' => 'required|exists:routers,id',
+            'profile' => 'required|string|max:120',
+            'quantity' => 'required|integer|min:1|max:200',
+            'prefix' => 'nullable|string|alpha_dash|max:12',
+        ]);
         $router = Router::findOrFail($data['router_id']);
+
+        if (! $router->enabled) {
+            return back()->withInput()->with('error', 'Router yang dipilih sedang dinonaktifkan.');
+        }
+
+        // Validate once before the batch so a typo cannot create partial batches.
+        try {
+            $routerOs->assertHotspotProfileExists($router, $data['profile']);
+        } catch (\\Throwable $exception) {
+            report($exception);
+            return back()->withInput()->with('error', 'Profil Hotspot tidak ditemukan atau router tidak dapat diakses. Periksa nama profil dan koneksi RouterOS.');
+        }
+
         $created = 0;
+        $pendingUsername = null;
+
         try {
             for ($i = 0; $i < (int) $data['quantity']; $i++) {
                 $username = strtoupper(($data['prefix'] ?? 'WIFI').Str::random(6));
                 $password = Str::random(8);
-                $routerOs->createHotspotUser($router, $username, $password, $data['profile'], 'Billing voucher');
-                HotspotVoucher::create(['router_id' => $router->id, 'created_by' => $request->session()->get('user_id'), 'username' => $username, 'password' => $password, 'profile' => $data['profile']]);
+                $pendingUsername = $username;
+
+                $routerOs->createHotspotUser($router, $username, $password, $data['profile'], 'Billing voucher', true);
+                HotspotVoucher::create([
+                    'router_id' => $router->id,
+                    'created_by' => $request->session()->get('user_id'),
+                    'username' => $username,
+                    'password' => $password,
+                    'profile' => $data['profile'],
+                ]);
+
                 $created++;
+                $pendingUsername = null;
             }
-        } catch (\Throwable $exception) {
+        } catch (\\Throwable $exception) {
             report($exception);
+            // Best effort cleanup if RouterOS created the account but the local row failed.
+            if ($pendingUsername !== null) {
+                try {
+                    $routerOs->disconnectHotspotActive($router, $pendingUsername);
+                    $routerOs->deleteHotspotUser($router, $pendingUsername);
+                } catch (\\Throwable $cleanupException) {
+                    report($cleanupException);
+                }
+            }
             Audit::log('hotspot.vouchers_generated', HotspotVoucher::class, null, ['router_id' => $router->id, 'count' => $created, 'partial' => true]);
             return back()->with('error', "RouterOS menghentikan pembuatan setelah {$created} voucher. Periksa router lalu cek daftar voucher.");
         }
@@ -48,6 +87,15 @@ class HotspotController extends Controller
     {
         $enable = $voucher->status !== 'active';
         $routerOs->setHotspotUserEnabled($voucher->router, $voucher->username, $enable);
+
+        if (! $enable) {
+
+            // Disabled credentials cannot be reused after their live session is removed.
+
+            $routerOs->disconnectHotspotActive($voucher->router, $voucher->username);
+
+        }
+
         $voucher->update(['status' => $enable ? 'active' : 'disabled']);
         Audit::log('hotspot.voucher_toggled', HotspotVoucher::class, $voucher->id, ['status' => $voucher->status]);
         return back()->with('success', 'Status voucher diperbarui di router dan Billing.');
@@ -55,7 +103,12 @@ class HotspotController extends Controller
 
     public function destroy(HotspotVoucher $voucher, RouterOsService $routerOs)
     {
+        // Remove the live session before deleting the credential and local record.
+
+        $routerOs->disconnectHotspotActive($voucher->router, $voucher->username);
+
         $routerOs->deleteHotspotUser($voucher->router, $voucher->username);
+
         Audit::log('hotspot.voucher_deleted', HotspotVoucher::class, $voucher->id);
         $voucher->delete();
         return back()->with('success', 'Voucher dihapus dari router dan Billing.');
