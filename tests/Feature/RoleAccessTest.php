@@ -85,8 +85,8 @@ class RoleAccessTest extends TestCase
             ->assertOk()
             ->assertSee(route('customers.show', $customer))
             ->assertSee('Detail')
-            ->assertDontSee(route('customers.edit', $customer))
-            ->assertDontSee(route('customers.destroy', $customer));
+            ->assertDontSee('Hapus')
+            ->assertDontSee(route('customers.edit', $customer));
 
         $this->withSession(['user_id' => $technician->id])
             ->get(route('customers.show', $customer))
