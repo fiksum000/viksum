@@ -475,20 +475,33 @@ class RouterOsService {
     }
 
     $client = $this->client($router);
-    $names = [$profile->routerProfileName(), $profile->routerProfileName().'-FUP'];
+    $ownedProfiles = [
+      $profile->routerProfileName() => 'VIKSUM:HOTSPOT:'.$profile->id.':NORMAL',
+      $profile->routerProfileName().'-FUP' => 'VIKSUM:HOTSPOT:'.$profile->id.':FUP',
+    ];
     $users = $client->query('/ip/hotspot/user/print')->read();
     foreach ($users as $user) {
-      if (in_array($user['profile'] ?? null, $names, true)) {
+      if (in_array($user['profile'] ?? null, array_keys($ownedProfiles), true)) {
         throw new RuntimeException("Profil '{$profile->name}' masih digunakan akun Hotspot di router.");
       }
     }
 
-    $profiles = $client->query('/ip/hotspot/user/profile/print')->read();
-    foreach ($names as $name) {
-      foreach ($profiles as $row) {
-        if (($row['name'] ?? null) === $name && isset($row['.id'])) {
-          $client->query((new Query('/ip/hotspot/user/profile/remove'))->equal('.id', $row['.id']))->read();
-        }
+    $profiles = collect($client->query('/ip/hotspot/user/profile/print')->read());
+    foreach ($ownedProfiles as $name => $ownerComment) {
+      $matches = $profiles->filter(fn (array $row) => ($row['name'] ?? null) === $name)->values();
+      if ($matches->isEmpty()) {
+        continue;
+      }
+      if ($matches->count() !== 1 || ! isset($matches[0]['.id'])
+        || ($matches[0]['comment'] ?? '') !== $ownerComment) {
+        throw new RuntimeException("Profil '{$name}' bukan profil milik billing; penghapusan dibatalkan.");
+      }
+    }
+
+    foreach ($ownedProfiles as $name => $ownerComment) {
+      $matches = $profiles->filter(fn (array $row) => ($row['name'] ?? null) === $name)->values();
+      if ($matches->isNotEmpty()) {
+        $client->query((new Query('/ip/hotspot/user/profile/remove'))->equal('.id', $matches[0]['.id']))->read();
       }
     }
   }
