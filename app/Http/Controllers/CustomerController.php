@@ -391,6 +391,14 @@ class CustomerController extends Controller
 
     public function destroy(Customer $customer, RouterOsService $routerOs)
     {
+        // Never permanently delete a live/suspended service directly from the list.
+        // The admin must terminate the service first so RouterOS disconnect/disable
+        // semantics are explicit and the action is visible in the customer workflow.
+        if (! in_array($customer->status, ['terminated', 'trial'], true)) {
+            return redirect()->route('customers.index')
+                ->with('warning', 'Hentikan layanan pelanggan terlebih dahulu sebelum menghapus permanen. Pelanggan aktif atau terisolir tidak dihapus langsung.');
+        }
+
         // Financial history is immutable: use the terminated status for former customers.
         if ($customer->invoices()->exists()) {
             return redirect()->route('customers.index')
