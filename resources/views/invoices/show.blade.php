@@ -22,6 +22,12 @@
         @elseif ($invoice->status === 'paid')
             <span class="badge text-bg-success fs-6">LUNAS</span>
         @endif
+        @if (in_array($billingUser?->role, ['super_admin', 'admin'], true) && in_array($invoice->status, ['draft', 'unpaid'], true) && $invoice->payments->isEmpty())
+            <form method="POST" action="{{ route('invoices.cancel', $invoice) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Batalkan invoice {{ $invoice->invoice_number }}? Tindakan ini tidak menghapus riwayat pelanggan.">
+                @csrf
+                <button class="btn btn-outline-danger mt-2" type="submit">Batalkan invoice</button>
+            </form>
+        @endif
     </div>
 </div>
 
