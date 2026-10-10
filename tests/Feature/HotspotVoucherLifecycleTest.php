@@ -64,12 +64,13 @@ class HotspotVoucherLifecycleTest extends TestCase
         $this->assertDatabaseMissing('hotspot_vouchers', ['id' => $voucher->id]);
     }
 
-    public function test_generator_rejects_a_profile_missing_from_router_before_creating_any_vouchers(): void
+    public function test_generator_rejects_an_unsynchronized_profile_before_creating_any_vouchers(): void
     {
         $router = $this->router();
         $admin = $this->loginAdmin();
 
         $profile = $this->profile($router, 'Missing package');
+        $profile->update(['sync_status' => 'failed']);
         $routerOs = Mockery::mock(RouterOsService::class);
         $routerOs->shouldReceive('createHotspotUser')->never();
         $this->app->instance(RouterOsService::class, $routerOs);
