@@ -88,7 +88,7 @@ class AutomaticIsolationSafetyTest extends TestCase
     {
         $router = Router::query()->create([
             'name' => 'Automatic isolation router '.$code,
-            'host' => '192.0.2.80',
+            'host' => '192.0.2.'.(80 + Router::query()->count()),
             'port' => 8728,
             'username' => 'auto-isolation-test',
             'password' => 'test-only-password',
