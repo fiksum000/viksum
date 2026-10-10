@@ -159,6 +159,20 @@ class CustomerController extends Controller
             ->with('portal_password_created', $portalPassword);
     }
 
+    public function resetPortalPassword(Customer $customer)
+    {
+        $password = CustomerIdentity::newPortalPassword();
+
+        $customer->forceFill(['portal_password' => $password])->save();
+        Audit::log('customer.portal_password_reset', Customer::class, $customer->id, [
+            'code' => $customer->customer_code,
+        ]);
+
+        return redirect()->route('customers.show', $customer)
+            ->with('success', 'Password portal berhasil dibuat ulang. Salin dan simpan sekarang; setelah halaman ditutup, password tidak ditampilkan lagi.')
+            ->with('portal_password_created', $password);
+    }
+
     public function show(Customer $customer)
     {
         $customer->load([
