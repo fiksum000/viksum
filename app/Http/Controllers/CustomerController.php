@@ -317,7 +317,7 @@ class CustomerController extends Controller
             ]);
 
             return redirect()->route('customers.index')->with('success', 'Pelanggan dihapus. Akun layanan yang dikelola billing sudah dibersihkan dari MikroTik.');
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             Log::warning('Customer deletion blocked or failed', [
                 'customer_id' => $customer->id,
                 'router_id' => $customer->router_id,
