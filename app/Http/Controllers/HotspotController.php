@@ -223,8 +223,11 @@ class HotspotController extends Controller
             report($exception);
             if ($pendingVoucher) {
                 try {
-                    $routerOs->disconnectHotspotActive($profile->router, $pendingVoucher->username);
-                    $routerOs->deleteHotspotUser($profile->router, $pendingVoucher->username);
+                    $routerOs->deleteManagedHotspotUser(
+                        $profile->router,
+                        $pendingVoucher->username,
+                        $pendingVoucher->comment ?: 'VIKSUM:V:'.$pendingVoucher->id,
+                    );
                 } catch (Throwable $cleanupException) {
                     report($cleanupException);
                 }
@@ -251,15 +254,29 @@ class HotspotController extends Controller
 
     public function toggle(HotspotVoucher $voucher, RouterOsService $routerOs)
     {
+        $expectedComment = $voucher->comment ?: (
+            $voucher->hotspot_profile_id ? 'VIKSUM:V:'.$voucher->id : 'Billing voucher'
+        );
+
         if ($voucher->status === 'expired'
             || ($voucher->expires_at && $voucher->expires_at->lte(now(config('billing.timezone'))))) {
             try {
-                $routerOs->setHotspotUserEnabled($voucher->router, $voucher->username, false);
+                if ($voucher->hotspot_profile_id) {
+                    $routerOs->setManagedHotspotUserEnabled($voucher->router, $voucher->username, false, $expectedComment);
+                } else {
+                    $routerOs->setHotspotUserEnabled($voucher->router, $voucher->username, false);
+                }
                 $routerOs->disconnectHotspotActive($voucher->router, $voucher->username);
+                $voucher->update(['status' => 'expired']);
             } catch (Throwable $exception) {
                 report($exception);
+                $voucher->update([
+                    'sync_status' => 'failed',
+                    'sync_error' => mb_substr($exception->getMessage(), 0, 2000),
+                ]);
+                return back()->with('error', 'Voucher kedaluwarsa, tetapi penonaktifan router gagal. Periksa status sinkronisasi.');
             }
-            $voucher->update(['status' => 'expired']);
+
             return back()->with('error', 'Voucher sudah kedaluwarsa dan tidak bisa diaktifkan lagi.');
         }
 
@@ -273,13 +290,16 @@ class HotspotController extends Controller
                     $voucher->username,
                     $voucher->password,
                     $voucher->fup_applied ? $profile->routerProfileName().'-FUP' : $profile->routerProfileName(),
-                    $voucher->comment ?: 'VIKSUM:V:'.$voucher->id,
+                    $expectedComment,
                     $voucher->username,
                     $enable,
+                    $expectedComment,
                 );
                 $voucher->update(['sync_status' => 'synced', 'sync_error' => null]);
+            } elseif ($profile) {
+                $routerOs->setManagedHotspotUserEnabled($voucher->router, $voucher->username, $enable, $expectedComment);
             } else {
-                // Backward-compatible handling for vouchers created before managed profiles.
+                // Legacy voucher records pre-date billing ownership markers.
                 $routerOs->setHotspotUserEnabled($voucher->router, $voucher->username, $enable);
             }
 
@@ -297,15 +317,20 @@ class HotspotController extends Controller
                 'sync_status' => 'failed',
                 'sync_error' => mb_substr($exception->getMessage(), 0, 2000),
             ]);
-            return back()->with('error', 'Status voucher belum diubah karena operasi MikroTik gagal.');
+            return back()->with('error', 'Status voucher belum diubah karena pemeriksaan kepemilikan atau operasi MikroTik gagal.');
         }
     }
 
     public function destroy(HotspotVoucher $voucher, RouterOsService $routerOs)
     {
+        $expectedComment = $voucher->comment ?: (
+            $voucher->hotspot_profile_id ? 'VIKSUM:V:'.$voucher->id : 'Billing voucher'
+        );
+
         try {
-            $routerOs->disconnectHotspotActive($voucher->router, $voucher->username);
-            $routerOs->deleteHotspotUser($voucher->router, $voucher->username);
+            // For managed vouchers this verifies the RouterOS comment before disconnect/remove.
+            // Older records use their original generator comment; if it differs, removal is refused.
+            $routerOs->deleteManagedHotspotUser($voucher->router, $voucher->username, $expectedComment);
         } catch (Throwable $exception) {
             report($exception);
             $voucher->update([
@@ -313,7 +338,7 @@ class HotspotController extends Controller
                 'sync_error' => mb_substr($exception->getMessage(), 0, 2000),
             ]);
 
-            return back()->with('error', 'Voucher tidak dihapus dari billing karena akun MikroTik belum berhasil dibersihkan.');
+            return back()->with('error', 'Voucher tidak dihapus karena kepemilikan akun MikroTik belum bisa dipastikan.');
         }
 
         Audit::log('hotspot.voucher_deleted', HotspotVoucher::class, $voucher->id, [
@@ -322,7 +347,7 @@ class HotspotController extends Controller
         ]);
         $voucher->delete();
 
-        return back()->with('success', 'Sesi diputus dan voucher dihapus dari MikroTik serta billing.');
+        return back()->with('success', 'Voucher dihapus dari billing dan akun milik voucher dibersihkan di MikroTik.');
     }
 
     public function syncVoucher(HotspotVoucher $voucher, RouterOsService $routerOs)
@@ -342,10 +367,11 @@ class HotspotController extends Controller
                 $voucher->router,
                 $voucher->username,
                 $voucher->password,
-                $voucher->fup_applied ? $profile->name.'-FUP' : $profile->name,
+                $voucher->fup_applied ? $profile->routerProfileName().'-FUP' : $profile->routerProfileName(),
                 $voucher->comment ?: 'VIKSUM:V:'.$voucher->id,
                 $voucher->username,
                 $voucher->status === 'active',
+                $voucher->comment ?: 'VIKSUM:V:'.$voucher->id,
             );
             $voucher->update(['sync_status' => 'synced', 'sync_error' => null]);
             Audit::log('hotspot.voucher_synced', HotspotVoucher::class, $voucher->id);
