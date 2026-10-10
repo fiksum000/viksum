@@ -46,6 +46,24 @@ class TripayConnectionCheckTest extends TestCase
         );
     }
 
+    public function test_callback_signature_is_valid_even_when_new_checkout_is_disabled(): void
+    {
+        PaymentSetting::query()->create([
+            'tripay_enabled' => false,
+            'tripay_mode' => 'sandbox',
+            'tripay_api_key' => 'test-api-key',
+            'tripay_private_key' => 'test-private-key',
+            'tripay_merchant_code' => 'T0001',
+            'dana_enabled' => false,
+        ]);
+
+        $rawPayload = '{"reference":"TRIPAY-EXISTING-001","status":"PAID"}';
+        $signature = hash_hmac('sha256', $rawPayload, 'test-private-key');
+
+        $this->assertTrue(app(TripayService::class)->verifyCallbackSignature($rawPayload, $signature));
+        $this->assertFalse(app(TripayService::class)->verifyCallbackSignature($rawPayload, 'invalid-signature'));
+    }
+
     public function test_payment_settings_page_exposes_connection_check_button(): void
     {
         $admin = $this->loginAdmin();
