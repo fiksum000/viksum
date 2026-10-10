@@ -42,6 +42,47 @@ class NetworkInventorySafetyTest extends TestCase
         $this->assertDatabaseHas('routers', ['id' => $router->id]);
     }
 
+    public function test_router_page_exposes_edit_form_and_blank_password_keeps_existing_secret(): void
+    {
+        $admin = $this->loginAdmin();
+        $router = Router::query()->create([
+            'name' => 'Editable router',
+            'host' => '192.0.2.71',
+            'port' => 8728,
+            'username' => 'old-api-user',
+            'password' => 'keep-this-password',
+            'enabled' => true,
+        ]);
+
+        $this->withSession(['user_id' => $admin->id])
+            ->get(route('routers.index'))
+            ->assertOk()
+            ->assertSee('Edit data router')
+            ->assertSee('router-host-'.$router->id);
+
+        $this->withSession(['user_id' => $admin->id])
+            ->put(route('routers.update', $router), [
+                'name' => 'Updated router',
+                'host' => '192.0.2.72',
+                'port' => 8728,
+                'username' => 'new-api-user',
+                'password' => '',
+                'ssl' => 0,
+                'enabled' => 1,
+                'notes' => 'Changed through the edit form',
+                'traffic_interface' => 'ether1',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $router->refresh();
+        $this->assertSame('Updated router', $router->name);
+        $this->assertSame('192.0.2.72', $router->host);
+        $this->assertSame('new-api-user', $router->username);
+        $this->assertSame('keep-this-password', $router->password);
+        $this->assertSame('Changed through the edit form', $router->notes);
+    }
+
     public function test_olt_cannot_be_deleted_while_it_has_onu_inventory(): void
     {
         $admin = $this->loginAdmin();
