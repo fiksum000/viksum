@@ -158,6 +158,24 @@ class CustomerController extends Controller
             ->with('portal_password_created', $portalPassword);
     }
 
+    public function show(Customer $customer)
+    {
+        $customer->load([
+            'package',
+            'router',
+            'hotspotProfile',
+            'onu.olt',
+            'invoices' => fn ($query) => $query->with('payments')->latest('period')->limit(12),
+        ]);
+
+        $fupState = FupState::query()
+            ->where('customer_id', $customer->id)
+            ->where('period', app(FupService::class)->currentPeriod())
+            ->first();
+
+        return view('customers.show', compact('customer', 'fupState'));
+    }
+
     public function edit(Customer $customer)
     {
         return view('customers.form', $this->formData($customer));
