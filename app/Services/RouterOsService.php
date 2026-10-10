@@ -309,9 +309,28 @@ class RouterOsService {
     $client = $this->client($router);
     $normalName = $profile->routerProfileName();
     $fupName = $normalName.'-FUP';
-    $onLogin = $this->managedHotspotOnLoginScript($profile->bind_mac);
     $normalOwner = 'VIKSUM:HOTSPOT:'.$profile->id.':NORMAL';
     $fupOwner = 'VIKSUM:HOTSPOT:'.$profile->id.':FUP';
+    $hasFupProfile = (int) $profile->fup_limit_bytes > 0
+      && filled($profile->fup_upload_speed)
+      && filled($profile->fup_download_speed);
+
+    // Preflight ownership for both names before making any RouterOS changes. In
+    // particular, do not move users away from a same-name FUP profile owned by
+    // an operator or another application.
+    $routerProfiles = collect($client->query('/ip/hotspot/user/profile/print')->read());
+    foreach ([$normalName => $normalOwner, $fupName => $fupOwner] as $name => $owner) {
+      $matches = $routerProfiles->filter(fn (array $row) => ($row['name'] ?? null) === $name)->values();
+      if ($matches->count() > 1) {
+        throw new RuntimeException("Profil RouterOS '{$name}' ditemukan lebih dari sekali; sinkronisasi dihentikan.");
+      }
+      if ($matches->isNotEmpty()
+        && (($matches[0]['comment'] ?? '') !== $owner || ! isset($matches[0]['.id']))) {
+        throw new RuntimeException("Profil '{$name}' bukan profil milik billing; tidak ada perubahan router yang dilakukan.");
+      }
+    }
+
+    $onLogin = $this->managedHotspotOnLoginScript($profile->bind_mac);
     $changedProfiles = [];
     $movedFromFup = [];
 
@@ -326,7 +345,7 @@ class RouterOsService {
       $changedProfiles[] = $normalName;
     }
 
-    if ($profile->fup_limit_bytes > 0 && filled($profile->fup_upload_speed) && filled($profile->fup_download_speed)) {
+    if ($hasFupProfile) {
       if ($this->upsertHotspotRouterProfile(
         $client,
         $fupName,
