@@ -88,8 +88,17 @@ class RouterController extends Controller
 
     public function destroy(Router $router)
     {
+        $inUse = Customer::where('router_id', $router->id)->exists()
+            || Package::where('router_id', $router->id)->exists()
+            || HotspotProfile::where('router_id', $router->id)->exists()
+            || HotspotVoucher::where('router_id', $router->id)->exists();
+
+        if ($inUse) {
+            return back()->with('warning', 'Router masih dipakai pelanggan, paket, profil, atau voucher. Pindahkan data atau hapus relasinya terlebih dahulu.');
+        }
+
         $router->delete();
 
-        return back()->with('success', 'Router dihapus.');
+        return back()->with('success', 'Router yang tidak memiliki relasi layanan berhasil dihapus.');
     }
 }
