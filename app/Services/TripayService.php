@@ -57,8 +57,12 @@ class TripayService
      */
     public function checkConnection(): array
     {
-        if (! $this->enabled()) {
-            throw new RuntimeException('Tripay belum aktif atau kredensialnya belum lengkap.');
+        // Permit a connection check before the admin enables live checkout. This
+        // validates saved credentials/mode without creating a financial transaction.
+        if (blank($this->value('tripay_api_key', 'services.tripay.api_key'))
+            || blank($this->value('tripay_private_key', 'services.tripay.private_key'))
+            || blank($this->value('tripay_merchant_code', 'services.tripay.merchant_code'))) {
+            throw new RuntimeException('Kredensial Tripay belum lengkap. Simpan Merchant Code, API Key, dan Private Key terlebih dahulu.');
         }
 
         return $this->fetchAvailableChannels();
