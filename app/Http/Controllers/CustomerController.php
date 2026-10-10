@@ -312,6 +312,9 @@ class CustomerController extends Controller
             $routerOs->disconnectPppActive($customer->router, $customer->pppoe_username);
         } elseif ($customer->status === 'isolated') {
             $routerOs->disconnectPppActive($customer->router, $customer->pppoe_username);
+        } elseif ($customer->status === 'active') {
+            // Re-enable a PPP secret when an operator changes an isolated customer back to active.
+            $routerOs->enablePppSecret($customer->router, $customer->pppoe_username, true);
         }
 
         // If an operator turned off FUP while editing this customer, keep the RouterOS
