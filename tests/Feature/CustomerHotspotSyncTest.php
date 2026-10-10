@@ -79,6 +79,8 @@ class CustomerHotspotSyncTest extends TestCase
             'portal_password' => 'WIFIpass',
         ]);
 
+        $existingPortalPasswordHash = $customer->portal_password;
+
         $routerOs = Mockery::mock(RouterOsService::class);
         $routerOs->shouldReceive('syncHotspotProfile')
             ->once()
@@ -100,7 +102,7 @@ class CustomerHotspotSyncTest extends TestCase
             'hotspot_username' => 'hs-new-name',
             'hotspot_password' => '',
             'hotspot_profile_id' => $newProfile->id,
-            'portal_password' => 'WIFIpass',
+            'portal_password' => '',
         ]);
 
         $this->withSession(['user_id' => $admin->id])
@@ -113,6 +115,7 @@ class CustomerHotspotSyncTest extends TestCase
         $this->assertSame('current-secret', $customer->hotspot_password);
         $this->assertSame($newProfile->name, $customer->hotspot_profile);
         $this->assertSame($newProfile->id, $customer->hotspot_profile_id);
+        $this->assertSame($existingPortalPasswordHash, $customer->portal_password, 'Blank portal password input must preserve the existing hash.');
     }
 
     private function payload(Router $router, Package $package, array $overrides = []): array
