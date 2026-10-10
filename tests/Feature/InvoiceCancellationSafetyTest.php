@@ -77,6 +77,29 @@ class InvoiceCancellationSafetyTest extends TestCase
         ]);
     }
 
+    public function test_invoice_adjustment_is_blocked_when_checkout_metadata_exists_without_payment_row(): void
+    {
+        $invoice = $this->invoice('unpaid');
+        $invoice->update([
+            'payment_url' => 'https://example.test/checkout',
+            'payment_reference' => 'CHECKOUT-METADATA-'.bin2hex(random_bytes(4)),
+        ]);
+        $this->loginAdmin();
+
+        $this->put(route('invoices.adjust', $invoice), [
+            'discount' => 10000,
+            'penalty' => 0,
+        ])->assertRedirect()
+          ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('invoices', [
+            'id' => $invoice->id,
+            'status' => 'unpaid',
+            'total' => 100000,
+            'payment_reference' => $invoice->payment_reference,
+        ]);
+    }
+
     public function test_paid_invoice_cannot_be_cancelled(): void
     {
         $invoice = $this->invoice('paid');
