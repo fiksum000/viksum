@@ -76,6 +76,31 @@ class CustomerConnectionStatusTest extends TestCase
             ->assertSee('Router tidak dapat dibaca');
     }
 
+    public function test_termination_router_errors_are_logged_not_exposed_to_browser(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Protected termination router',
+            'host' => '192.0.2.25',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-termination-error', 'Protected termination customer', 'active');
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('findPppSecret')->once()
+            ->andThrow(new \\RuntimeException('sensitive-router-api-response-details'));
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->patch(route('customers.terminate', $customer))
+            ->assertRedirect(route('customers.show', $customer))
+            ->assertSessionHas('warning', 'Layanan belum dihentikan. Periksa koneksi router dan log aplikasi.')
+            ->assertSessionMissing('error');
+
+        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'status' => 'active']);
+    }
+
     public function test_customer_with_invoice_history_cannot_be_permanently_deleted(): void
     {
         $router = Router::query()->create([
