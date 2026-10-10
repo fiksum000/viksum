@@ -61,13 +61,154 @@ class RouterOsService {
   public function deletePppSecret(Router $router,string $username):void{$client=$this->client($router);$rows=$this->findPppSecret($router,$username);foreach($rows as $row){if(isset($row['.id']))$client->query((new Query('/ppp/secret/remove'))->equal('.id',$row['.id']))->read();}}
   public function listPppSecrets(Router $router):array{return $this->client($router)->query('/ppp/secret/print')->read();}
   public function listPppProfiles(Router $router):array{return $this->client($router)->query('/ppp/profile/print')->read();}
-  public function listHotspotUsers(Router $router):array{return $this->client($router)->query('/ip/hotspot/user/print')->read();}
-  public function listHotspotActive(Router $router):array{return $this->client($router)->query('/ip/hotspot/active/print')->read();}
-  public function listHotspotProfiles(Router $router):array{return $this->client($router)->query('/ip/hotspot/user/profile/print')->read();}
-  public function createHotspotUser(Router $router,string $username,string $password,string $profile,string $comment=''):void{$this->client($router)->query((new Query('/ip/hotspot/user/add'))->equal('name',$username)->equal('password',$password)->equal('profile',$profile)->equal('comment',$comment))->read();}
-  public function setHotspotUserEnabled(Router $router,string $username,bool $enabled):void{$client=$this->client($router);$rows=$client->query((new Query('/ip/hotspot/user/print'))->where('name',$username))->read();$id=$rows[0]['.id']??null;if(!$id)throw new RuntimeException("Hotspot user {$username} tidak ditemukan.");$client->query((new Query('/ip/hotspot/user/set'))->equal('.id',$id)->equal('disabled',$enabled?'no':'yes'))->read();}
-  public function disconnectHotspotActive(Router $router,string $username):void{$client=$this->client($router);$rows=$client->query((new Query('/ip/hotspot/active/print'))->where('user',$username))->read();foreach($rows as $row){if(isset($row['.id']))$client->query((new Query('/ip/hotspot/active/remove'))->equal('.id',$row['.id']))->read();}}
-    public function deleteHotspotUser(Router $router,string $username):void{$client=$this->client($router);$rows=$client->query((new Query('/ip/hotspot/user/print'))->where('name',$username))->read();foreach($rows as $row){if(isset($row['.id']))$client->query((new Query('/ip/hotspot/user/remove'))->equal('.id',$row['.id']))->read();}}
+  public function listHotspotUsers(Router $router): array
+  {
+    return $this->client($router)->query('/ip/hotspot/user/print')->read();
+  }
+
+  public function listHotspotActive(Router $router): array
+  {
+    return $this->client($router)->query('/ip/hotspot/active/print')->read();
+  }
+
+  public function listHotspotProfiles(Router $router): array
+  {
+    return $this->client($router)->query('/ip/hotspot/user/profile/print')->read();
+  }
+
+  public function assertHotspotProfileExists(Router $router, string $profile): void
+  {
+    if (trim($profile) === '') {
+      throw new RuntimeException('Profil Hotspot wajib diisi.');
+    }
+
+    $exists = collect($this->listHotspotProfiles($router))
+      ->contains(fn (array $row) => ($row['name'] ?? null) === $profile);
+
+    if (! $exists) {
+      throw new RuntimeException("Profil Hotspot '{$profile}' tidak ditemukan pada router {$router->name}.");
+    }
+  }
+
+  /**
+   * Create a voucher account on RouterOS. The calling generator validates the
+   * profile once before a batch; other callers should leave $profileValidated false.
+   */
+  public function createHotspotUser(
+    Router $router,
+    string $username,
+    string $password,
+    string $profile,
+    string $comment = '',
+    bool $profileValidated = false,
+  ): void {
+    if (! $profileValidated) {
+      $this->assertHotspotProfileExists($router, $profile);
+    }
+
+    $client = $this->client($router);
+    $existing = $client->query('/ip/hotspot/user/print')->read();
+    if (collect($existing)->contains(fn (array $row) => ($row['name'] ?? null) === $username)) {
+      throw new RuntimeException("Username Hotspot '{$username}' sudah ada di router.");
+    }
+
+    $client->query((new Query('/ip/hotspot/user/add'))
+      ->equal('name', $username)
+      ->equal('password', $password)
+      ->equal('profile', $profile)
+      ->equal('comment', $comment))->read();
+
+    $verified = $client->query((new Query('/ip/hotspot/user/print'))->where('name', $username))->read();
+    if (! collect($verified)->contains(fn (array $row) => ($row['name'] ?? null) === $username)) {
+      throw new RuntimeException("Voucher Hotspot '{$username}' tidak terverifikasi setelah dibuat.");
+    }
+  }
+
+  /**
+   * Synchronize a customer account without overwriting an unrelated RouterOS
+   * user that happens to have the requested username.
+   */
+  public function createOrUpdateHotspotUser(
+    Router $router,
+    string $username,
+    string $password,
+    string $profile,
+    string $comment = '',
+    ?string $previousUsername = null,
+  ): void {
+    $client = $this->client($router);
+    $profiles = $client->query('/ip/hotspot/user/profile/print')->read();
+    if (! collect($profiles)->contains(fn (array $row) => ($row['name'] ?? null) === $profile)) {
+      throw new RuntimeException("Profil Hotspot '{$profile}' tidak ditemukan pada router {$router->name}.");
+    }
+
+    $users = $client->query('/ip/hotspot/user/print')->read();
+    $findByName = fn (string $candidate) => collect($users)
+      ->first(fn (array $row) => ($row['name'] ?? null) === $candidate);
+    $target = $findByName($username);
+    $previous = filled($previousUsername) ? $findByName($previousUsername) : null;
+
+    if ($target && (! $previous || ($target['.id'] ?? null) !== ($previous['.id'] ?? null))) {
+      throw new RuntimeException("Username Hotspot '{$username}' sudah ada di MikroTik dan tidak cocok dengan akun pelanggan ini.");
+    }
+
+    $query = new Query($previous ? '/ip/hotspot/user/set' : '/ip/hotspot/user/add');
+    $query->equal('name', $username)
+      ->equal('password', $password)
+      ->equal('profile', $profile)
+      ->equal('comment', $comment);
+
+    if ($previous) {
+      $query->equal('.id', $previous['.id']);
+    }
+
+    $client->query($query)->read();
+
+    $verified = $client->query((new Query('/ip/hotspot/user/print'))->where('name', $username))->read();
+    if (! collect($verified)->contains(fn (array $row) => ($row['name'] ?? null) === $username)) {
+      throw new RuntimeException("Akun Hotspot '{$username}' tidak terverifikasi setelah disinkronkan.");
+    }
+  }
+
+  public function setHotspotUserEnabled(Router $router, string $username, bool $enabled): void
+  {
+    $client = $this->client($router);
+    $rows = $client->query((new Query('/ip/hotspot/user/print'))->where('name', $username))->read();
+    $matches = collect($rows)->filter(fn (array $row) => ($row['name'] ?? null) === $username)->values();
+
+    if ($matches->count() !== 1 || ! isset($matches[0]['.id'])) {
+      throw new RuntimeException("Akun Hotspot '{$username}' tidak ditemukan secara unik di router.");
+    }
+
+    $client->query((new Query('/ip/hotspot/user/set'))
+      ->equal('.id', $matches[0]['.id'])
+      ->equal('disabled', $enabled ? 'no' : 'yes'))->read();
+  }
+
+  public function disconnectHotspotActive(Router $router, string $username): void
+  {
+    $client = $this->client($router);
+    $rows = $client->query((new Query('/ip/hotspot/active/print'))->where('user', $username))->read();
+
+    foreach ($rows as $row) {
+      if (isset($row['.id'])) {
+        $client->query((new Query('/ip/hotspot/active/remove'))->equal('.id', $row['.id']))->read();
+      }
+    }
+  }
+
+  public function deleteHotspotUser(Router $router, string $username): void
+  {
+    $client = $this->client($router);
+    $rows = $client->query((new Query('/ip/hotspot/user/print'))->where('name', $username))->read();
+
+    foreach ($rows as $row) {
+      if (isset($row['.id']) && ($row['name'] ?? null) === $username) {
+        $client->query((new Query('/ip/hotspot/user/remove'))->equal('.id', $row['.id']))->read();
+      }
+    }
+  }
+
   /** Read current per-session PPPoE rates without changing RouterOS configuration. */
   public function activePppTrafficMap(Router $router, array $usernames = []):array
   {
