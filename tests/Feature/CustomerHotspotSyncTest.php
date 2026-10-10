@@ -1,15 +1,15 @@
 <?php
 
-namespace Tests\\Feature;
+namespace Tests\Feature;
 
-use App\\Models\\Customer;
-use App\\Models\\Package;
-use App\\Models\\Router;
-use App\\Models\\User;
-use App\\Services\\RouterOsService;
-use Illuminate\\Foundation\\Testing\\RefreshDatabase;
+use App\Models\Customer;
+use App\Models\Package;
+use App\Models\Router;
+use App\Models\User;
+use App\Services\RouterOsService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
-use Tests\\TestCase;
+use Tests\TestCase;
 
 class CustomerHotspotSyncTest extends TestCase
 {
