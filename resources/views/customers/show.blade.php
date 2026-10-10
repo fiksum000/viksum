@@ -10,6 +10,14 @@
         @if(in_array($billingUser?->role,['super_admin','admin','operator'],true))
             <a href="{{ route('customers.edit',$customer) }}" class="btn btn-primary">Edit pelanggan</a>
         @endif
+        @if(in_array($billingUser?->role,['super_admin','admin','operator'],true)
+            && in_array($customer->status, ['active', 'isolated', 'suspended'], true)
+            && ($customer->service_type === 'pppoe' || ($customer->service_type === 'hotspot' && $customer->hotspot_profile_id)))
+            <form method="POST" action="{{ route('customers.sync',$customer) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Sinkronkan akun {{ $customer->name }} ke router MikroTik? Username dan profil router akan diperiksa sebelum diubah.">
+                @csrf
+                <button class="btn btn-outline-info" type="submit">Sinkronkan ke MikroTik</button>
+            </form>
+        @endif
         @if(in_array($billingUser?->role,['super_admin','admin','operator'],true) && $customer->status === 'active')
             <form method="POST" action="{{ route('customers.isolate',$customer) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Isolir pelanggan {{ $customer->name }} sekarang? Sesi aktif akan diputus dan metode isolir sesuai pengaturan billing diterapkan.">
                 @csrf
