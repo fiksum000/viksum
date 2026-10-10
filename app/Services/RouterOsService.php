@@ -458,13 +458,15 @@ class RouterOsService {
 
   private function managedHotspotOnLoginScript(bool $bindMac): string
   {
-    $script = ':local u $"user"; :local id [/ip hotspot user find where name=$u]; :if ([:len $id] > 0) do={ :local c [/ip hotspot user get $id comment]; :if ([:find $c "VIKSUM:V:"] = 0) do={ :if ([:find $c "|FIRST="] = nil) do={ /ip hotspot user set $id comment=($c . "|FIRST=" . [/system clock get date] . " " . [/system clock get time]); }';
+    $script = ':local u $"user"; :local id [/ip hotspot user find where name=$u]; :if ([:len $id] > 0) do={ :local c [/ip hotspot user get $id comment]; :if ([:find $c "VIKSUM:V:"] = 0) do={ :if ([:find $c "|FIRST="] = nil) do={ /ip hotspot user set $id comment=($c . "|FIRST=" . [/system clock get date] . " " . [/system clock get time]); } }';
 
     if ($bindMac) {
+      // Bind-MAC applies to both vouchers and customer Hotspot accounts; only
+      // first-login timestamping is restricted to billing-generated vouchers.
       $script .= ' :local savedMac [/ip hotspot user get $id mac-address]; :if ($savedMac = "00:00:00:00:00:00") do={ /ip hotspot user set $id mac-address=$"mac-address"; }';
     }
 
-    return $script.' } }';
+    return $script.' }';
   }
 
   public function deleteHotspotProfile(HotspotProfile $profile): void
