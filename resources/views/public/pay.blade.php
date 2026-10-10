@@ -24,6 +24,16 @@
                     <p class="display-6 mb-3">Rp {{ number_format($invoice->total, 0, ',', '.') }}</p>
                     @if ($invoice->status === 'paid')
                         <div class="alert alert-success">Invoice sudah lunas.</div>
+                    @elseif (in_array($invoice->status, ['cancelled', 'expired', 'draft'], true))
+                        <div class="alert alert-warning">
+                            @if ($invoice->status === 'cancelled')
+                                Invoice ini sudah dibatalkan dan tidak dapat dibayar melalui tautan ini.
+                            @elseif ($invoice->status === 'expired')
+                                Invoice ini sudah kedaluwarsa. Silakan hubungi admin untuk bantuan.
+                            @else
+                                Invoice ini belum diterbitkan dan belum dapat dibayar.
+                            @endif
+                        </div>
                     @else
                         @if (session('error'))
                             <div class="alert alert-danger">{{ session('error') }}</div>
