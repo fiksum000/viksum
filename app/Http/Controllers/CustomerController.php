@@ -198,7 +198,7 @@ class CustomerController extends Controller
             ]);
 
             return redirect()->route('customers.show', $customer)
-                ->with('warning', 'Pelanggan belum diisolir: '.$exception->getMessage());
+                ->with('warning', 'Pelanggan belum diisolir. Periksa koneksi router dan log aplikasi.');
         }
     }
 
@@ -223,7 +223,7 @@ class CustomerController extends Controller
             ]);
 
             return redirect()->route('customers.show', $customer)
-                ->with('warning', 'Isolir belum dapat dibuka: '.$exception->getMessage());
+                ->with('warning', 'Isolir belum dapat dibuka. Periksa koneksi router dan log aplikasi.');
         }
     }
 
