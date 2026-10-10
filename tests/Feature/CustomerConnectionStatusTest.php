@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\Router;
 use App\Models\User;
+use App\Services\IsolationService;
 use App\Services\RouterOsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
@@ -74,6 +75,36 @@ class CustomerConnectionStatusTest extends TestCase
             ->assertOk()
             ->assertSee('Tidak diketahui')
             ->assertSee('Router tidak dapat dibaca');
+    }
+
+    public function test_detail_actions_support_manual_isolate_and_unisolate(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Manual isolation router',
+            'host' => '192.0.2.24',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-manual-isolation', 'Manual isolation customer', 'active');
+
+        $isolation = Mockery::mock(IsolationService::class);
+        $isolation->shouldReceive('isolate')->once()
+            ->andReturnUsing(fn (Customer $record) => $record->update(['status' => 'isolated']));
+        $isolation->shouldReceive('unisolate')->once()
+            ->andReturnUsing(fn (Customer $record) => $record->update(['status' => 'active']));
+        $this->app->instance(IsolationService::class, $isolation);
+        $this->loginAdmin();
+
+        $this->post(route('customers.isolate', $customer))
+            ->assertRedirect(route('customers.show', $customer))
+            ->assertSessionHas('success');
+        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'status' => 'isolated']);
+
+        $this->post(route('customers.unisolate', $customer))
+            ->assertRedirect(route('customers.show', $customer))
+            ->assertSessionHas('success');
+        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'status' => 'active']);
     }
 
     public function test_customer_with_invoice_history_cannot_be_permanently_deleted(): void
