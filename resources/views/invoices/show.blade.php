@@ -22,6 +22,13 @@
         @elseif ($invoice->status === 'paid')
             <span class="badge text-bg-success fs-6">LUNAS</span>
         @endif
+        @if ($invoice->status === 'paid' && in_array($billingUser?->role, ['super_admin', 'admin'], true))
+            <form method="POST" action="{{ route('invoices.retry-activation', $invoice) }}" class="mt-2" onsubmit="return confirm('Ulangi proses lanjutan untuk invoice lunas {{ $invoice->invoice_number }}? Invoice tidak akan ditagih ulang; sistem hanya mencoba antrekan aktivasi/notifikasi lagi.')">
+                @csrf
+                <button class="btn btn-outline-warning" type="submit">Ulangi proses lanjutan</button>
+            </form>
+            <div class="form-text">Gunakan jika layanan atau notifikasi belum diproses setelah pembayaran dicatat.</div>
+        @endif
         @if (in_array($billingUser?->role, ['super_admin', 'admin'], true) && in_array($invoice->status, ['draft', 'unpaid'], true) && $invoice->payments->isEmpty())
             <form method="POST" action="{{ route('invoices.cancel', $invoice) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Batalkan invoice {{ $invoice->invoice_number }}? Tindakan ini tidak menghapus riwayat pelanggan.">
                 @csrf
