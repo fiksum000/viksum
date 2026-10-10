@@ -74,7 +74,7 @@ class InvoiceController
 
             // A pending or completed payment attempt may still settle at the gateway.
             // Do not cancel an invoice once any payment record exists.
-            if ($lockedInvoice->payments()->exists()) {
+            if ($lockedInvoice->payments()->exists() || filled($lockedInvoice->payment_reference) || filled($lockedInvoice->payment_url)) {
                 return 'payments';
             }
 
