@@ -100,6 +100,7 @@ class FupServiceSafetyTest extends TestCase
             'pppoe_profile_normal' => $package->normal_profile,
             'fup_enabled' => true,
             'fup_override' => true,
+            'fup_limit_bytes' => 1000,
             'fup_speed_after' => $package->fup_speed_after,
         ]);
         $state = FupState::query()->create([
@@ -133,12 +134,12 @@ class FupServiceSafetyTest extends TestCase
                 'name' => 'fup-active-user',
                 'profile' => $package->normal_profile,
             ]]);
+        $profileChanges = [];
         $routerOs->shouldReceive('setPppProfile')
             ->once()
-            ->withArgs(fn (Router $actualRouter, string $username, string $profile) =>
-                $actualRouter->id === $router->id
-                && $username === 'fup-active-user'
-                && $profile === $package->fup_speed_after);
+            ->andReturnUsing(function (Router $actualRouter, string $username, string $profile) use (&$profileChanges): void {
+                $profileChanges[] = [$actualRouter->id, $username, $profile];
+            });
         $routerOs->shouldReceive('disconnectPppActive')
             ->once()
             ->with($router, 'fup-active-user');
@@ -148,6 +149,7 @@ class FupServiceSafetyTest extends TestCase
 
         $this->assertSame(2000, $state->fresh()->total_bytes);
         $this->assertTrue($state->fresh()->limited);
+        $this->assertSame([[$router->id, 'fup-active-user', $package->fup_speed_after]], $profileChanges);
     }
 
     private function isolatedCustomerWithFupState(string $period): array
