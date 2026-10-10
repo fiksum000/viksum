@@ -95,7 +95,7 @@ class InvoiceNotificationController
 
         try {
             $queued = $notifications->queue($invoice, $event, $target, $message, $variables, $scheduledFor, $oncePerInvoice);
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             report($exception);
             return back()->with('error', 'Notifikasi belum masuk antrean. Periksa koneksi WhatsApp dan worker, lalu coba lagi.');
         }
