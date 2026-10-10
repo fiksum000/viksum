@@ -134,20 +134,22 @@ class CustomerController extends Controller
 
         try {
             $this->syncPppSecret($customer, $routerOs);
+            $this->syncHotspotUser($customer, $routerOs);
             $feedbackKey = 'success';
             $message = $customer->status === 'trial'
-                ? 'Pelanggan disimpan sebagai uji coba; belum ada secret yang dikirim ke MikroTik.'
+                ? 'Pelanggan disimpan sebagai uji coba; belum ada akun layanan yang dikirim ke MikroTik.'
                 : ($customer->service_type === 'pppoe'
                 ? 'Pelanggan ditambahkan dan secret PPP berhasil disimpan di MikroTik.'
-                : 'Pelanggan ditambahkan.');
+                : 'Pelanggan ditambahkan dan akun Hotspot berhasil disinkronkan ke MikroTik.');
         } catch (\Throwable $e) {
-            Log::warning('Customer PPP secret sync failed', [
+            Log::warning('Customer RouterOS account sync failed', [
                 'customer_id' => $customer->id,
                 'router_id' => $customer->router_id,
+                'service_type' => $customer->service_type,
                 'error' => $e->getMessage(),
             ]);
             $feedbackKey = 'warning';
-            $message = 'Data pelanggan tersimpan, tetapi sinkronisasi secret PPP gagal. Periksa koneksi router dan log aplikasi.';
+            $message = 'Data pelanggan tersimpan, tetapi sinkronisasi akun layanan ke MikroTik gagal. Periksa router, nama profil, dan log aplikasi.';
         }
 
         return redirect()->route('customers.edit', $customer)
@@ -175,6 +177,7 @@ class CustomerController extends Controller
         $previousRouter = $customer->router;
         $previousServiceType = $customer->service_type;
         $previousUsername = $customer->pppoe_username;
+        $previousHotspotUsername = $customer->hotspot_username;
 
         DB::transaction(function () use ($customer, $data, $onuId) {
             $customer->update($data);
@@ -192,25 +195,42 @@ class CustomerController extends Controller
                 ? $previousUsername
                 : null;
             $this->syncPppSecret($customer, $routerOs, $previousUsernameOnSelectedRouter);
+
+            $previousHotspotUsernameOnSelectedRouter = $previousServiceType === 'hotspot'
+                && $previousRouter?->id === $customer->router_id
+                ? $previousHotspotUsername
+                : null;
+            $this->syncHotspotUser($customer, $routerOs, $previousHotspotUsernameOnSelectedRouter);
+
             if ($customer->status !== 'trial' && $previousRouter && $previousServiceType === 'pppoe'
                 && ($customer->service_type !== 'pppoe' || $previousRouter->id !== $customer->router_id || $previousUsername !== $customer->pppoe_username)
                 && $previousUsername) {
                 $routerOs->deletePppSecret($previousRouter, $previousUsername);
             }
+
+            // If the customer moved off Hotspot or to another router, revoke the old account
+            // only after the new service account has been synchronized successfully.
+            if ($previousServiceType === 'hotspot' && $previousRouter && $previousHotspotUsername
+                && ($customer->service_type !== 'hotspot' || $previousRouter->id !== $customer->router_id)) {
+                $routerOs->disconnectHotspotActive($previousRouter, $previousHotspotUsername);
+                $routerOs->deleteHotspotUser($previousRouter, $previousHotspotUsername);
+            }
+
             $feedbackKey = 'success';
             $message = $customer->status === 'trial'
-                ? 'Data uji coba diperbarui; belum ada perubahan ke MikroTik.'
+                ? 'Data uji coba diperbarui; akun layanan dinonaktifkan jika sebelumnya tersinkron.'
                 : ($customer->service_type === 'pppoe'
                 ? 'Pelanggan diperbarui dan secret PPP berhasil disinkronkan ke MikroTik.'
-                : 'Data pelanggan diperbarui.');
+                : 'Pelanggan diperbarui dan akun Hotspot berhasil disinkronkan ke MikroTik.');
         } catch (\Throwable $e) {
-            Log::warning('Customer PPP secret sync failed', [
+            Log::warning('Customer RouterOS account sync failed', [
                 'customer_id' => $customer->id,
                 'router_id' => $customer->router_id,
+                'service_type' => $customer->service_type,
                 'error' => $e->getMessage(),
             ]);
             $feedbackKey = 'warning';
-            $message = 'Data pelanggan tersimpan, tetapi sinkronisasi secret PPP gagal. Periksa koneksi router dan log aplikasi.';
+            $message = 'Data pelanggan tersimpan, tetapi sinkronisasi akun layanan ke MikroTik gagal. Periksa router, nama profil, dan log aplikasi.';
         }
 
         return redirect()->route('customers.edit', $customer)->with($feedbackKey, $message);
@@ -233,6 +253,40 @@ class CustomerController extends Controller
             'password' => $customer->pppoe_password,
             'profile' => $customer->package?->normal_profile ?: 'default',
         ], $previousUsername);
+    }
+
+    private function syncHotspotUser(Customer $customer, RouterOsService $routerOs, ?string $previousUsername = null): void
+    {
+        if ($customer->service_type !== 'hotspot') {
+            return;
+        }
+
+        if (! $customer->router_id || ! $customer->router) {
+            throw new RuntimeException('Pilih router MikroTik untuk layanan Hotspot.');
+        }
+
+        // A trial account should not remain usable on the router.
+        if ($customer->status === 'trial') {
+            if (filled($previousUsername)) {
+                $routerOs->setHotspotUserEnabled($customer->router, $previousUsername, false);
+                $routerOs->disconnectHotspotActive($customer->router, $previousUsername);
+            }
+            return;
+        }
+
+        if (blank($customer->hotspot_username) || blank($customer->hotspot_password)) {
+            throw new RuntimeException('Username dan password Hotspot harus tersedia.');
+        }
+
+        $routerOs->createOrUpdateHotspotUser(
+            $customer->router,
+            $customer->hotspot_username,
+            $customer->hotspot_password,
+            $customer->hotspot_profile ?: 'default',
+            'Billing customer '.$customer->customer_code,
+            $previousUsername,
+            $customer->status === 'active',
+        );
     }
 
     private function syncOnu(Customer $customer, ?int $onuId): void
@@ -267,6 +321,7 @@ class CustomerController extends Controller
         $service = $r->input('service_type');
         $status = $r->input('status');
         $needsPppSetup = $service === 'pppoe' && $status !== 'trial';
+        $needsHotspotSetup = $service === 'hotspot' && $status !== 'trial';
         $needsPppPassword = $needsPppSetup && ($creating || ($customer?->status === 'trial' && blank($customer?->pppoe_password)));
         $rawWhatsapp = $r->input('whatsapp_number');
         $normalizedWhatsapp = WhatsappNumber::normalize(is_string($rawWhatsapp) ? $rawWhatsapp : null);
@@ -301,7 +356,7 @@ class CustomerController extends Controller
             'due_day' => 'required|integer|min:1|max:28',
             'grace_days' => 'nullable|integer|min:0|max:31',
             'activated_at' => 'nullable|date',
-            'router_id' => [$needsPppSetup ? 'required' : 'nullable', 'exists:routers,id'],
+            'router_id' => [$needsPppSetup || $needsHotspotSetup ? 'required' : 'nullable', 'exists:routers,id'],
             'package_id' => ['required', 'exists:packages,id'],
             'pppoe_username' => [$needsPppSetup ? 'required' : 'nullable', 'max:120', Rule::unique('customers', 'pppoe_username')->ignore($customer?->id)],
             'pppoe_password' => [$needsPppPassword ? 'required' : 'nullable', 'string', 'max:255'],
@@ -311,6 +366,7 @@ class CustomerController extends Controller
             'pppoe_profile_isolir' => 'nullable|max:120',
             'hotspot_username' => [$service === 'hotspot' ? 'required' : 'nullable', 'max:120', Rule::unique('customers', 'hotspot_username')->ignore($customer?->id)],
             'hotspot_password' => [$service === 'hotspot' && $creating ? 'required' : 'nullable', 'string', 'max:255'],
+            'hotspot_profile' => [$service === 'hotspot' ? 'required' : 'nullable', 'string', 'max:120'],
             'olt_name' => 'nullable|max:120',
             'pon_port' => 'nullable|max:50',
             'onu_id' => 'nullable|max:50',
