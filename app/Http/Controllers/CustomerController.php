@@ -240,21 +240,86 @@ class CustomerController extends Controller
 
     private function syncPppSecret(Customer $customer, RouterOsService $routerOs, ?string $previousUsername = null): void
     {
-        if ($customer->service_type !== 'pppoe' || $customer->status === 'trial') {
+        if ($customer->service_type !== 'pppoe') {
             return;
         }
+
         if (!$customer->router_id || !$customer->router) {
             throw new RuntimeException('Pilih router MikroTik untuk layanan PPPoE.');
         }
+
+        // A trial customer must not retain working credentials if an existing customer
+        // was converted to trial. Keep the secret for later use, but disable and disconnect it.
+        if ($customer->status === 'trial') {
+            if (filled($previousUsername)) {
+                $routerOs->enablePppSecret($customer->router, $previousUsername, false);
+                $routerOs->disconnectPppActive($customer->router, $previousUsername);
+            }
+            return;
+        }
+
         if (blank($customer->pppoe_username) || blank($customer->pppoe_password)) {
             throw new RuntimeException('Username dan password PPP harus tersedia.');
+        }
+
+        $package = $customer->package;
+        if (!$package || (int) $package->router_id !== (int) $customer->router_id) {
+            throw new RuntimeException('Paket PPP harus ditautkan ke router yang sama dengan pelanggan.');
+        }
+        if (in_array($package->sync_status, ['pending', 'failed'], true)) {
+            throw new RuntimeException('Profil paket PPP belum berhasil disinkronkan. Buka menu Paket PPPoE lalu tekan Sinkron ulang.');
+        }
+
+        $state = FupState::query()
+            ->where('customer_id', $customer->id)
+            ->where('period', app(FupService::class)->currentPeriod())
+            ->first();
+
+        $fupEnabled = $customer->fup_override !== null
+            ? (bool) $customer->fup_override
+            : (bool) $package->fup_enabled;
+        $fupProfile = $customer->fup_override === true && filled($customer->fup_speed_after)
+            ? $customer->fup_speed_after
+            : $package->fup_speed_after;
+
+        if ($customer->status === 'isolated') {
+            if (config('billing.isolation_method') === 'disable') {
+                $targetProfile = $package->normal_profile;
+            } else {
+                $targetProfile = $customer->pppoe_profile_isolir ?: config('billing.isolation_profile');
+            }
+        } elseif ($customer->status === 'active' && $fupEnabled && $state?->limited && filled($fupProfile)) {
+            $targetProfile = $fupProfile;
+        } else {
+            $targetProfile = $package->normal_profile;
+        }
+
+        if (blank($targetProfile)) {
+            throw new RuntimeException('Profil PPP tujuan belum dikonfigurasi pada paket pelanggan.');
         }
 
         $routerOs->createOrUpdatePppSecret($customer->router, [
             'name' => $customer->pppoe_username,
             'password' => $customer->pppoe_password,
-            'profile' => $customer->package?->normal_profile ?: 'default',
+            'profile' => $targetProfile,
         ], $previousUsername);
+
+        if ($customer->status === 'isolated' && config('billing.isolation_method') === 'disable') {
+            $routerOs->enablePppSecret($customer->router, $customer->pppoe_username, false);
+            $routerOs->disconnectPppActive($customer->router, $customer->pppoe_username);
+        } elseif (in_array($customer->status, ['suspended', 'terminated'], true)) {
+            $routerOs->enablePppSecret($customer->router, $customer->pppoe_username, false);
+            $routerOs->disconnectPppActive($customer->router, $customer->pppoe_username);
+        } elseif ($customer->status === 'isolated') {
+            $routerOs->disconnectPppActive($customer->router, $customer->pppoe_username);
+        }
+
+        // If an operator turned off FUP while editing this customer, keep the RouterOS
+        // profile in sync now rather than waiting for the scheduled collector.
+        if ($customer->status === 'active' && $state?->limited
+            && (!$fupEnabled || blank($fupProfile))) {
+            $state->update(['limited' => false]);
+        }
     }
 
     private function syncHotspotUser(Customer $customer, RouterOsService $routerOs, ?string $previousUsername = null): void
