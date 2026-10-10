@@ -115,7 +115,7 @@ class CustomerConnectionStatusTest extends TestCase
             ->assertSee('Detail Pelanggan')
             ->assertSee('Customer detail example')
             ->assertSee('Riwayat tagihan terbaru')
-            ->assertSee('unpaid');
+            ->assertSee('Unpaid');
     }
 
     private function customer(Router $router, string $username, string $name, string $status): Customer
