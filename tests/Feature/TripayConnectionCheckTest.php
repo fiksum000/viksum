@@ -56,6 +56,7 @@ class TripayConnectionCheckTest extends TestCase
         $this->app->instance(TripayService::class, $tripay);
 
         $this->withSession(['user_id' => $admin->id])
+            ->from(route('payment-settings.index'))
             ->post(route('payment-settings.check-tripay'))
             ->assertRedirect(route('payment-settings.index'))
             ->assertSessionHas('tripay_check', fn (array $result) =>
