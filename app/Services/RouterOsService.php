@@ -169,6 +169,10 @@ class RouterOsService {
         throw new RuntimeException('Format burst tidak valid. Contoh batas 5M/20M, threshold 2M/10M, waktu 5s.');
       }
       $rateLimit .= ' '.$burst.' '.$threshold.' '.$burstTime.'/'.$burstTime.' '.(int) $package->priority;
+    } else {
+      // Keep the configured priority while setting burst rate and threshold equal
+      // to the base rate, so burst is effectively disabled.
+      $rateLimit .= ' '.$rateLimit.' '.$rateLimit.' 1s/1s '.(int) $package->priority;
     }
 
     $changed = $this->upsertManagedPppProfile(
