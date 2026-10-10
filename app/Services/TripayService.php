@@ -138,11 +138,15 @@ class TripayService
 
     public function verifyCallbackSignature(string $raw, ?string $signature): bool
     {
-        if (! $signature || ! $this->enabled()) {
+        // Checkout can be disabled while existing transactions are still settling.
+        // Callback authentication must therefore depend on the saved private key,
+        // not the switch that controls creation of new checkouts.
+        $privateKey = $this->value('tripay_private_key', 'services.tripay.private_key');
+        if (! $signature || blank($privateKey)) {
             return false;
         }
 
-        $expected = hash_hmac('sha256', $raw, (string) $this->value('tripay_private_key', 'services.tripay.private_key'));
+        $expected = hash_hmac('sha256', $raw, (string) $privateKey);
         return hash_equals($expected, $signature);
     }
 
