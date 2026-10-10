@@ -13,13 +13,11 @@
         @if(in_array($billingUser?->role,['super_admin','admin','operator'],true) && $customer->status === 'active')
             <form method="POST" action="{{ route('customers.isolate',$customer) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Isolir pelanggan {{ $customer->name }} sekarang? Sesi aktif akan diputus dan metode isolir sesuai pengaturan billing diterapkan.">
                 @csrf
-                @method('PATCH')
                 <button class="btn btn-outline-danger" type="submit">Isolir</button>
             </form>
         @elseif(in_array($billingUser?->role,['super_admin','admin','operator'],true) && $customer->status === 'isolated')
             <form method="POST" action="{{ route('customers.unisolate',$customer) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Buka isolir pelanggan {{ $customer->name }}? Profil layanan normal atau profil FUP yang sesuai akan dipulihkan.">
                 @csrf
-                @method('PATCH')
                 <button class="btn btn-outline-success" type="submit">Buka isolir</button>
             </form>
         @endif
