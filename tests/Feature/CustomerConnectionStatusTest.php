@@ -76,6 +76,271 @@ class CustomerConnectionStatusTest extends TestCase
             ->assertSee('Router tidak dapat dibaca');
     }
 
+    public function test_imported_hotspot_customer_without_managed_profile_can_be_stopped(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Legacy Hotspot router',
+            'host' => '192.0.2.26',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = Customer::query()->create([
+            'customer_code' => 'LEGACY-HS-'.strtoupper(bin2hex(random_bytes(4))),
+            'name' => 'Imported legacy Hotspot customer',
+            'service_type' => 'hotspot',
+            'status' => 'active',
+            'router_id' => $router->id,
+            'hotspot_username' => 'legacy-hotspot-user',
+        ]);
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('setHotspotUserEnabled')->once()
+            ->withArgs(fn ($r, $username, $enabled) => $r->id === $router->id && $username === 'legacy-hotspot-user' && $enabled === false);
+        $routerOs->shouldReceive('disconnectHotspotActive')->once()
+            ->withArgs(fn ($r, $username) => $r->id === $router->id && $username === 'legacy-hotspot-user');
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->patch(route('customers.terminate', $customer))
+            ->assertRedirect(route('customers.show', $customer))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'status' => 'terminated']);
+    }
+
+    public function test_termination_router_errors_are_logged_not_exposed_to_browser(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Protected termination router',
+            'host' => '192.0.2.25',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-termination-error', 'Protected termination customer', 'active');
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('findPppSecret')->once()
+            ->andThrow(new \RuntimeException('sensitive-router-api-response-details'));
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->patch(route('customers.terminate', $customer))
+            ->assertRedirect(route('customers.show', $customer))
+            ->assertSessionHas('warning', 'Layanan belum dihentikan. Periksa koneksi router dan log aplikasi.')
+            ->assertSessionMissing('error');
+
+        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'status' => 'active']);
+    }
+
+    public function test_customer_list_disables_permanent_delete_when_invoice_history_exists(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Archived customer router',
+            'host' => '192.0.2.27',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-archived-history', 'Archived customer with invoices', 'terminated');
+        $this->invoice($customer, 'paid');
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('activePppMap')->once()->andReturn([]);
+        $routerOs->shouldReceive('listHotspotActive')->once()->andReturn([]);
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->get(route('customers.index'))
+            ->assertOk()
+            ->assertSee('Pelanggan memiliki riwayat tagihan; jangan hapus permanen.', false);
+    }
+
+    public function test_customer_with_invoice_history_cannot_be_permanently_deleted(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Billing history router',
+            'host' => '192.0.2.20',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-history', 'Customer with history', 'terminated');
+        $this->invoice($customer, 'paid');
+        $this->loginAdmin();
+
+        $this->delete(route('customers.destroy', $customer))
+            ->assertRedirect(route('customers.index'))
+            ->assertSessionHas('warning');
+
+        $this->assertDatabaseHas('customers', ['id' => $customer->id]);
+        $this->assertDatabaseHas('invoices', ['customer_id' => $customer->id, 'status' => 'paid']);
+    }
+
+    public function test_live_customer_cannot_be_permanently_deleted_before_termination(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Protected active customer router',
+            'host' => '192.0.2.24',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-active-protected', 'Active customer must be terminated first', 'active');
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldNotReceive('findPppSecret');
+        $routerOs->shouldNotReceive('deletePppSecret');
+        $routerOs->shouldNotReceive('deleteManagedHotspotUser');
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->delete(route('customers.destroy', $customer))
+            ->assertRedirect(route('customers.index'))
+            ->assertSessionHas('warning', 'Hentikan layanan pelanggan terlebih dahulu sebelum menghapus permanen. Pelanggan aktif atau terisolir tidak dihapus langsung.');
+
+        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'status' => 'active']);
+    }
+
+    public function test_deleting_terminated_customer_disconnects_stale_session_when_secret_is_missing(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Missing secret deletion router',
+            'host' => '192.0.2.27',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-delete-stale', 'Stale session delete customer', 'terminated');
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('findPppSecret')->once()
+            ->withArgs(fn ($actualRouter, $username) =>
+                $actualRouter->id === $router->id && $username === 'ppp-delete-stale')
+            ->andReturn([]);
+        $routerOs->shouldReceive('disconnectPppActive')->once()
+            ->withArgs(fn ($actualRouter, $username) =>
+                $actualRouter->id === $router->id && $username === 'ppp-delete-stale');
+        $routerOs->shouldNotReceive('deletePppSecret');
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->delete(route('customers.destroy', $customer))
+            ->assertRedirect(route('customers.index'))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('customers', ['id' => $customer->id]);
+    }
+
+    public function test_customer_without_invoice_history_can_be_deleted_after_router_account_cleanup(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Deletion router',
+            'host' => '192.0.2.23',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-delete', 'Customer to delete', 'terminated');
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('findPppSecret')->once()
+            ->andReturn([['.id' => '*2', 'name' => 'ppp-delete', 'service' => 'pppoe', 'profile' => 'ISOLIR']]);
+        $routerOs->shouldReceive('disconnectPppActive')->once()
+            ->withArgs(fn ($r, $username) => $r->id === $router->id && $username === 'ppp-delete');
+        $routerOs->shouldReceive('deletePppSecret')->once()
+            ->withArgs(fn ($r, $username) => $r->id === $router->id && $username === 'ppp-delete');
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->delete(route('customers.destroy', $customer))
+            ->assertRedirect(route('customers.index'))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('customers', ['id' => $customer->id]);
+    }
+
+    public function test_customer_detail_page_shows_customer_and_invoice_history(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Customer detail router',
+            'host' => '192.0.2.21',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-detail', 'Customer detail example', 'active');
+        $invoice = $this->invoice($customer, 'unpaid');
+        $this->loginAdmin();
+
+        $this->get(route('customers.show', $customer))
+            ->assertOk()
+            ->assertSee('Detail Pelanggan')
+            ->assertSee('Customer detail example')
+            ->assertSee('Riwayat tagihan terbaru')
+            ->assertSee('Unpaid')
+            ->assertSee('Detail invoice')
+            ->assertSee(route('invoices.show', $invoice));
+    }
+
+    public function test_terminating_pppoe_customer_disconnects_stale_session_when_secret_is_missing(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Missing secret termination router',
+            'host' => '192.0.2.26',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-stale-session', 'Missing secret customer', 'active');
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('findPppSecret')->once()
+            ->withArgs(fn ($actualRouter, $username) =>
+                $actualRouter->id === $router->id && $username === 'ppp-stale-session')
+            ->andReturn([]);
+        $routerOs->shouldNotReceive('enablePppSecret');
+        $routerOs->shouldReceive('disconnectPppActive')->once()
+            ->withArgs(fn ($actualRouter, $username) =>
+                $actualRouter->id === $router->id && $username === 'ppp-stale-session');
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->withSession(['user_id' => User::where('email', 'admin@example.test')->value('id')])
+            ->patch(route('customers.terminate', $customer))
+            ->assertRedirect(route('customers.show', $customer))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'status' => 'terminated']);
+    }
+
+    public function test_terminating_pppoe_customer_disables_secret_and_disconnects_session(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Termination router',
+            'host' => '192.0.2.22',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-terminate', 'Customer to terminate', 'active');
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldReceive('findPppSecret')->once()->withArgs(fn ($r, $username) => $r->id === $router->id && $username === 'ppp-terminate')
+            ->andReturn([['.id' => '*1', 'name' => 'ppp-terminate', 'service' => 'pppoe', 'profile' => 'ISOLIR']]);
+        $routerOs->shouldReceive('enablePppSecret')->once()->withArgs(fn ($r, $username, $enabled) => $r->id === $router->id && $username === 'ppp-terminate' && $enabled === false);
+        $routerOs->shouldReceive('disconnectPppActive')->once()->withArgs(fn ($r, $username) => $r->id === $router->id && $username === 'ppp-terminate');
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->patch(route('customers.terminate', $customer))
+            ->assertRedirect(route('customers.show', $customer))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'status' => 'terminated']);
+    }
+
     private function customer(Router $router, string $username, string $name, string $status): Customer
     {
         return Customer::query()->create([

@@ -18,10 +18,18 @@ class PaymentController
             return back()->with('error', 'Nominal pembayaran harus sama dengan total invoice.');
         }
 
-        $paid = DB::transaction(function () use ($invoice, $data): bool {
+        $result = DB::transaction(function () use ($invoice, $data): string {
             $lockedInvoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
-            if ($lockedInvoice->status === 'paid') {
-                return false;
+            if ($lockedInvoice->status !== 'unpaid') {
+                return 'status';
+            }
+
+            // Do not accept cash/manual settlement while a Tripay checkout or callback
+            // could still complete; otherwise a late gateway payment could double-charge.
+            if ($lockedInvoice->payments()->where('provider', 'tripay')->exists()
+                || filled($lockedInvoice->payment_reference)
+                || filled($lockedInvoice->payment_url)) {
+                return 'tripay';
             }
 
             $lockedInvoice->update(['status' => 'paid', 'paid_at' => now()]);
@@ -34,11 +42,14 @@ class PaymentController
                 'status' => 'paid',
                 'paid_at' => now(),
             ]);
-            return true;
+            return 'paid';
         });
 
-        if (!$paid) {
-            return back()->with('error', 'Invoice sudah lunas.');
+        if ($result === 'tripay') {
+            return back()->with('error', 'Invoice memiliki checkout atau riwayat Tripay. Periksa dan selesaikan transaksi gateway sebelum mencatat pembayaran manual.');
+        }
+        if ($result !== 'paid') {
+            return back()->with('error', 'Invoice tidak berstatus belum dibayar atau sudah diproses.');
         }
 
         try {

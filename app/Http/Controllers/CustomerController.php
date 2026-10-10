@@ -1,8 +1,9 @@
 <?php
 namespace App\Http\Controllers;
 
-use App\Models\{Customer, FupState, Onu, Package, Router};
+use App\Models\{Customer, FupState, HotspotProfile, HotspotVoucher, Onu, Package, Router};
 use App\Services\FupService;
+use App\Services\IsolationService;
 use App\Services\RouterOsService;
 
 use App\Services\CustomerQueryService;
@@ -25,7 +26,7 @@ class CustomerController extends Controller
             'service_type' => ['nullable', 'in:pppoe,hotspot'],
             'package_id' => ['nullable', 'integer', 'exists:packages,id'],
         ]);
-        $q = $customerQuery->filtered($filters)->paginate(25)->withQueryString();
+        $q = $customerQuery->filtered($filters)->withExists('invoices')->paginate(25)->withQueryString();
         $period = now(config('billing.timezone'))->format('Y-m');
         $customers = $q->getCollection();
         $customers->load(['invoices' => fn ($query) => $query->where('period', $period)]);
@@ -85,6 +86,7 @@ class CustomerController extends Controller
             'customer' => $customer,
             'packages' => Package::with('router')->orderBy('name')->get(),
             'routers' => Router::orderBy('name')->get(),
+            'hotspotProfiles' => HotspotProfile::query()->where('enabled', true)->orWhere('id', $customer->hotspot_profile_id)->orderBy('name')->get(),
             'onus' => Onu::with('olt')->where(function ($q) use ($customer) {
                 $q->whereNull('customer_id');
                 if ($customer->exists) {
@@ -134,25 +136,235 @@ class CustomerController extends Controller
 
         try {
             $this->syncPppSecret($customer, $routerOs);
+            $this->syncHotspotUser($customer, $routerOs);
             $feedbackKey = 'success';
             $message = $customer->status === 'trial'
-                ? 'Pelanggan disimpan sebagai uji coba; belum ada secret yang dikirim ke MikroTik.'
+                ? 'Pelanggan disimpan sebagai uji coba; belum ada akun layanan yang dikirim ke MikroTik.'
                 : ($customer->service_type === 'pppoe'
                 ? 'Pelanggan ditambahkan dan secret PPP berhasil disimpan di MikroTik.'
-                : 'Pelanggan ditambahkan.');
+                : 'Pelanggan ditambahkan dan akun Hotspot berhasil disinkronkan ke MikroTik.');
         } catch (\Throwable $e) {
-            Log::warning('Customer PPP secret sync failed', [
+            Log::warning('Customer RouterOS account sync failed', [
                 'customer_id' => $customer->id,
                 'router_id' => $customer->router_id,
+                'service_type' => $customer->service_type,
                 'error' => $e->getMessage(),
             ]);
             $feedbackKey = 'warning';
-            $message = 'Data pelanggan tersimpan, tetapi sinkronisasi secret PPP gagal. Periksa koneksi router dan log aplikasi.';
+            $message = 'Data pelanggan tersimpan, tetapi sinkronisasi akun layanan ke MikroTik gagal. Periksa router, nama profil, dan log aplikasi.';
         }
 
         return redirect()->route('customers.edit', $customer)
             ->with($feedbackKey, $message)
             ->with('portal_password_created', $portalPassword);
+    }
+
+    public function resetPortalPassword(Customer $customer)
+    {
+        $password = CustomerIdentity::newPortalPassword();
+
+        $customer->forceFill(['portal_password' => $password])->save();
+        Audit::log('customer.portal_password_reset', Customer::class, $customer->id, [
+            'code' => $customer->customer_code,
+        ]);
+
+        return redirect()->route('customers.show', $customer)
+            ->with('success', 'Password portal berhasil dibuat ulang. Salin dan simpan sekarang; setelah halaman ditutup, password tidak ditampilkan lagi.')
+            ->with('portal_password_created', $password);
+    }
+
+    public function show(Request $request, Customer $customer)
+    {
+        $customer->load([
+            'package',
+            'router',
+            'hotspotProfile',
+            'onu.olt',
+            'invoices' => fn ($query) => $query->with('payments')->latest('period')->limit(12),
+        ]);
+
+        $fupState = FupState::query()
+            ->where('customer_id', $customer->id)
+            ->where('period', app(FupService::class)->currentPeriod())
+            ->first();
+
+        // Reveal a newly generated portal password once only, then consume the flash value.
+        $portalPasswordCreated = $request->session()->pull('portal_password_created');
+
+        return view('customers.show', compact('customer', 'fupState', 'portalPasswordCreated'));
+    }
+
+    public function isolate(Customer $customer, IsolationService $isolation)
+    {
+        if ($customer->status !== 'active') {
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Hanya pelanggan aktif yang dapat diisolir.');
+        }
+
+        try {
+            $isolation->isolate($customer);
+            Audit::log('customer.isolated_manual', Customer::class, $customer->id, ['code' => $customer->customer_code]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('success', 'Pelanggan berhasil diisolir dan sesi aktif diputus.');
+        } catch (\Throwable $exception) {
+            Log::warning('Manual customer isolation failed', [
+                'customer_id' => $customer->id,
+                'router_id' => $customer->router_id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Pelanggan belum diisolir. Periksa koneksi router dan log aplikasi.');
+        }
+    }
+
+    public function unisolate(Customer $customer, IsolationService $isolation)
+    {
+        if ($customer->status !== 'isolated') {
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Buka isolir hanya tersedia untuk pelanggan yang sedang berstatus isolir.');
+        }
+
+        try {
+            $isolation->unisolate($customer);
+            Audit::log('customer.unisolated_manual', Customer::class, $customer->id, ['code' => $customer->customer_code]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('success', 'Isolir dibuka. Profil normal atau FUP yang sesuai telah dipulihkan.');
+        } catch (\Throwable $exception) {
+            Log::warning('Manual customer unisolation failed', [
+                'customer_id' => $customer->id,
+                'router_id' => $customer->router_id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Isolir belum dapat dibuka. Periksa koneksi router dan log aplikasi.');
+        }
+    }
+
+    public function syncToRouter(Customer $customer, RouterOsService $routerOs)
+    {
+        if (! in_array($customer->status, ['active', 'isolated', 'suspended'], true)) {
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Sinkronisasi hanya tersedia untuk layanan aktif, isolir, atau ditangguhkan.');
+        }
+
+        try {
+            $router = $customer->router;
+            if (! $router || ! $router->enabled) {
+                throw new RuntimeException('Router tidak tersedia.');
+            }
+
+            if ($customer->service_type === 'pppoe') {
+                $username = trim((string) $customer->pppoe_username);
+                if ($username === '') {
+                    throw new RuntimeException('Username PPP belum diatur.');
+                }
+
+                $duplicateBillingIdentity = Customer::query()
+                    ->where('router_id', $customer->router_id)
+                    ->where('service_type', 'pppoe')
+                    ->where('pppoe_username', $username)
+                    ->where('id', '!=', $customer->id)
+                    ->exists();
+                if ($duplicateBillingIdentity) {
+                    throw new RuntimeException('Username PPP digunakan oleh pelanggan lain di billing.');
+                }
+
+                $matches = collect($routerOs->findPppSecret($router, $username))
+                    ->filter(fn (array $row) => ($row['name'] ?? null) === $username)
+                    ->values();
+                if ($matches->count() > 1) {
+                    throw new RuntimeException('Username PPP tidak unik di router.');
+                }
+
+                $previousUsername = null;
+                if ($matches->isNotEmpty()) {
+                    $secret = $matches->first();
+                    if (isset($secret['service']) && $secret['service'] !== 'pppoe') {
+                        throw new RuntimeException('Akun router tidak cocok dengan jenis layanan PPPoE.');
+                    }
+
+                    $allowedProfiles = array_filter([
+                        $customer->package?->normal_profile,
+                        $customer->package?->fup_speed_after,
+                        $customer->pppoe_profile_normal,
+                        $customer->pppoe_profile_isolir,
+                        $customer->fup_speed_after,
+                        config('billing.isolation_profile'),
+                    ]);
+                    if (! in_array((string) ($secret['profile'] ?? ''), $allowedProfiles, true)) {
+                        throw new RuntimeException('Profil akun router tidak cocok dengan profil pelanggan.');
+                    }
+
+                    // Existing PPP secrets have no billing ownership marker. Only update
+                    // an existing row after its service type and profile are verified.
+                    $previousUsername = $username;
+                }
+
+                $this->syncPppSecret($customer, $routerOs, $previousUsername);
+            } elseif ($customer->service_type === 'hotspot') {
+                $username = trim((string) $customer->hotspot_username);
+                if ($username === '' || ! $customer->hotspot_profile_id) {
+                    throw new RuntimeException('Username dan profil Hotspot terkelola harus tersedia untuk sinkronisasi.');
+                }
+
+                $duplicateCustomer = Customer::query()
+                    ->where('router_id', $customer->router_id)
+                    ->where('service_type', 'hotspot')
+                    ->where('hotspot_username', $username)
+                    ->where('id', '!=', $customer->id)
+                    ->exists();
+                $duplicateVoucher = HotspotVoucher::query()
+                    ->where('router_id', $customer->router_id)
+                    ->where('username', $username)
+                    ->exists();
+                if ($duplicateCustomer || $duplicateVoucher) {
+                    throw new RuntimeException('Username Hotspot digunakan oleh pelanggan atau voucher lain.');
+                }
+
+                $matches = collect($routerOs->listHotspotUsers($router))
+                    ->filter(fn (array $row) => ($row['name'] ?? null) === $username)
+                    ->values();
+                if ($matches->count() > 1) {
+                    throw new RuntimeException('Username Hotspot tidak unik di router.');
+                }
+
+                $previousUsername = null;
+                if ($matches->isNotEmpty()) {
+                    $expectedComment = 'Billing customer '.$customer->customer_code;
+                    if ((string) ($matches->first()['comment'] ?? '') !== $expectedComment) {
+                        throw new RuntimeException('Penanda kepemilikan akun Hotspot tidak cocok.');
+                    }
+                    $previousUsername = $username;
+                }
+
+                $this->syncHotspotUser($customer, $routerOs, $previousUsername);
+            } else {
+                throw new RuntimeException('Jenis layanan pelanggan tidak didukung untuk sinkronisasi.');
+            }
+
+            Audit::log('customer.router_sync', Customer::class, $customer->id, [
+                'router_id' => $customer->router_id,
+                'service_type' => $customer->service_type,
+                'status' => $customer->status,
+            ]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('success', 'Akun pelanggan berhasil disinkronkan ke MikroTik.');
+        } catch (\Throwable $exception) {
+            Log::warning('Customer RouterOS resynchronization failed', [
+                'customer_id' => $customer->id,
+                'router_id' => $customer->router_id,
+                'service_type' => $customer->service_type,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Sinkronisasi belum berhasil. Periksa koneksi router, data layanan, dan log aplikasi.');
+        }
     }
 
     public function edit(Customer $customer)
@@ -175,6 +387,7 @@ class CustomerController extends Controller
         $previousRouter = $customer->router;
         $previousServiceType = $customer->service_type;
         $previousUsername = $customer->pppoe_username;
+        $previousHotspotUsername = $customer->hotspot_username;
 
         DB::transaction(function () use ($customer, $data, $onuId) {
             $customer->update($data);
@@ -188,51 +401,387 @@ class CustomerController extends Controller
         Audit::log('customer.updated', Customer::class, $customer->id);
 
         try {
-            $previousUsernameOnSelectedRouter = $previousRouter?->id === $customer->router_id
+            $previousUsernameOnSelectedRouter = $previousServiceType === 'pppoe'
+                && $previousRouter?->id === $customer->router_id
                 ? $previousUsername
                 : null;
             $this->syncPppSecret($customer, $routerOs, $previousUsernameOnSelectedRouter);
-            if ($customer->status !== 'trial' && $previousRouter && $previousServiceType === 'pppoe'
+
+            $previousHotspotUsernameOnSelectedRouter = $previousServiceType === 'hotspot'
+                && $previousRouter?->id === $customer->router_id
+                ? $previousHotspotUsername
+                : null;
+            $this->syncHotspotUser($customer, $routerOs, $previousHotspotUsernameOnSelectedRouter);
+
+            if ($previousRouter && $previousServiceType === 'pppoe'
                 && ($customer->service_type !== 'pppoe' || $previousRouter->id !== $customer->router_id || $previousUsername !== $customer->pppoe_username)
                 && $previousUsername) {
-                $routerOs->deletePppSecret($previousRouter, $previousUsername);
+                if ($customer->status === 'trial') {
+                    // A trial record must not leave the old PPP session working even
+                    // when the customer changes service type or router at the same time.
+                    $routerOs->enablePppSecret($previousRouter, $previousUsername, false);
+                    $routerOs->disconnectPppActive($previousRouter, $previousUsername);
+                } else {
+                    $routerOs->deletePppSecret($previousRouter, $previousUsername);
+                }
             }
+
+            // If the customer moved off Hotspot or to another router, revoke the old account
+            // only after the new service account has been synchronized successfully.
+            if ($previousServiceType === 'hotspot' && $previousRouter && $previousHotspotUsername
+                && ($customer->service_type !== 'hotspot' || $previousRouter->id !== $customer->router_id)) {
+                $routerOs->disconnectHotspotActive($previousRouter, $previousHotspotUsername);
+                $routerOs->deleteManagedHotspotUser($previousRouter, $previousHotspotUsername, 'Billing customer '.$customer->customer_code);
+            }
+
             $feedbackKey = 'success';
             $message = $customer->status === 'trial'
-                ? 'Data uji coba diperbarui; belum ada perubahan ke MikroTik.'
+                ? 'Data uji coba diperbarui; akun layanan dinonaktifkan jika sebelumnya tersinkron.'
                 : ($customer->service_type === 'pppoe'
                 ? 'Pelanggan diperbarui dan secret PPP berhasil disinkronkan ke MikroTik.'
-                : 'Data pelanggan diperbarui.');
+                : 'Pelanggan diperbarui dan akun Hotspot berhasil disinkronkan ke MikroTik.');
         } catch (\Throwable $e) {
-            Log::warning('Customer PPP secret sync failed', [
+            Log::warning('Customer RouterOS account sync failed', [
                 'customer_id' => $customer->id,
                 'router_id' => $customer->router_id,
+                'service_type' => $customer->service_type,
                 'error' => $e->getMessage(),
             ]);
             $feedbackKey = 'warning';
-            $message = 'Data pelanggan tersimpan, tetapi sinkronisasi secret PPP gagal. Periksa koneksi router dan log aplikasi.';
+            $message = 'Data pelanggan tersimpan, tetapi sinkronisasi akun layanan ke MikroTik gagal. Periksa router, nama profil, dan log aplikasi.';
         }
 
         return redirect()->route('customers.edit', $customer)->with($feedbackKey, $message);
     }
 
+    public function terminate(Customer $customer, RouterOsService $routerOs)
+    {
+        if ($customer->status === 'terminated') {
+            return redirect()->route('customers.show', $customer)->with('success', 'Pelanggan sudah berstatus berhenti.');
+        }
+
+        try {
+            $router = $customer->router;
+            $username = $customer->service_type === 'pppoe'
+                ? $customer->pppoe_username
+                : $customer->hotspot_username;
+
+            if (filled($username) && !$router) {
+                throw new RuntimeException('Router pelanggan tidak ditemukan. Status layanan tidak diubah agar kondisi jaringan tidak salah dicatat.');
+            }
+
+            if (filled($username) && $router && !$router->enabled) {
+                throw new RuntimeException('Router pelanggan sedang dinonaktifkan. Aktifkan router terlebih dahulu agar layanan dapat dihentikan dengan aman.');
+            }
+
+            if (filled($username) && $router && $customer->service_type === 'pppoe') {
+                $matches = collect($routerOs->findPppSecret($router, $username))
+                    ->filter(fn (array $row) => ($row['name'] ?? null) === $username)
+                    ->values();
+                if ($matches->count() > 1) {
+                    throw new RuntimeException('Username PPP ditemukan lebih dari satu kali di MikroTik. Status tidak diubah.');
+                }
+                if ($matches->isNotEmpty()) {
+                    $secret = $matches->first();
+                    $package = $customer->package;
+                    $allowedProfiles = array_filter([
+                        $package?->normal_profile,
+                        $package?->fup_speed_after,
+                        $customer->pppoe_profile_normal,
+                        $customer->pppoe_profile_isolir,
+                        $customer->fup_speed_after,
+                        config('billing.isolation_profile'),
+                    ]);
+                    if ((isset($secret['service']) && $secret['service'] !== 'pppoe')
+                        || !in_array((string) ($secret['profile'] ?? ''), $allowedProfiles, true)) {
+                        throw new RuntimeException('Secret PPP tidak cocok dengan profil pelanggan yang dikenal. Periksa MikroTik sebelum menghentikan layanan.');
+                    }
+                    $routerOs->enablePppSecret($router, $username, false);
+                }
+
+                // A stale PPP active session can survive after the secret was
+                // removed manually. Always try to revoke the session before we
+                // persist the terminated state, even when no secret remains.
+                $routerOs->disconnectPppActive($router, $username);
+            } elseif (filled($username) && $router && $customer->service_type === 'hotspot') {
+                if ($customer->hotspot_profile_id) {
+                    $routerOs->setManagedHotspotUserEnabled(
+                        $router,
+                        $username,
+                        false,
+                        'Billing customer '.$customer->customer_code,
+                    );
+                } else {
+                    // Imported/legacy Hotspot users have no billing ownership marker.
+                    // Match the legacy isolation path and still require a unique username in RouterOS.
+                    $routerOs->setHotspotUserEnabled($router, $username, false);
+                }
+                $routerOs->disconnectHotspotActive($router, $username);
+            }
+
+            $customer->update(['status' => 'terminated']);
+            Audit::log('customer.terminated', Customer::class, $customer->id, [
+                'code' => $customer->customer_code,
+                'service_type' => $customer->service_type,
+            ]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('success', 'Layanan dihentikan. Riwayat tagihan dan pembayaran tetap tersimpan.');
+        } catch (\Throwable $exception) {
+            Log::warning('Customer termination failed', [
+                'customer_id' => $customer->id,
+                'router_id' => $customer->router_id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Layanan belum dihentikan. Periksa koneksi router dan log aplikasi.');
+        }
+    }
+
+    public function destroy(Customer $customer, RouterOsService $routerOs)
+    {
+        // Never permanently delete a live/suspended service directly from the list.
+        // The admin must terminate the service first so RouterOS disconnect/disable
+        // semantics are explicit and the action is visible in the customer workflow.
+        if (! in_array($customer->status, ['terminated', 'trial'], true)) {
+            return redirect()->route('customers.index')
+                ->with('warning', 'Hentikan layanan pelanggan terlebih dahulu sebelum menghapus permanen. Pelanggan aktif atau terisolir tidak dihapus langsung.');
+        }
+
+        // Financial history is immutable: use the terminated status for former customers.
+        if ($customer->invoices()->exists()) {
+            return redirect()->route('customers.index')
+                ->with('warning', 'Pelanggan memiliki riwayat tagihan. Jangan hapus permanen; buka Edit lalu ubah status menjadi Berhenti agar riwayat keuangan tetap aman.');
+        }
+
+        try {
+            $router = $customer->router;
+            $hasRouterAccount = ($customer->service_type === 'pppoe' && filled($customer->pppoe_username))
+                || ($customer->service_type === 'hotspot' && filled($customer->hotspot_username));
+            if ($hasRouterAccount && !$router) {
+                throw new RuntimeException('Router pelanggan tidak ditemukan di billing. Pulihkan data router terlebih dahulu agar akun MikroTik tidak tertinggal.');
+            }
+            if ($router) {
+                if (!$router->enabled && (
+                    ($customer->service_type === 'pppoe' && filled($customer->pppoe_username))
+                    || ($customer->service_type === 'hotspot' && filled($customer->hotspot_username))
+                )) {
+                    throw new RuntimeException('Router pelanggan sedang dinonaktifkan. Aktifkan router agar akun layanan dapat diperiksa dan dibersihkan sebelum data dihapus.');
+                }
+
+                if ($router->enabled && $customer->service_type === 'pppoe' && filled($customer->pppoe_username)) {
+                    $matches = collect($routerOs->findPppSecret($router, $customer->pppoe_username))
+                        ->filter(fn (array $row) => ($row['name'] ?? null) === $customer->pppoe_username)
+                        ->values();
+
+                    if ($matches->count() > 1) {
+                        throw new RuntimeException('Username PPP ditemukan lebih dari satu kali di MikroTik. Penghapusan dibatalkan demi keamanan.');
+                    }
+
+                    if ($matches->isNotEmpty()) {
+                        $secret = $matches->first();
+                        $package = $customer->package;
+                        $allowedProfiles = array_filter([
+                            $package?->normal_profile,
+                            $package?->fup_speed_after,
+                            $customer->pppoe_profile_normal,
+                            $customer->pppoe_profile_isolir,
+                            $customer->fup_speed_after,
+                            config('billing.isolation_profile'),
+                        ]);
+                        if (isset($secret['service']) && $secret['service'] !== 'pppoe') {
+                            throw new RuntimeException('Akun dengan username yang sama bukan secret PPPoE; tidak dihapus.');
+                        }
+                        if (!in_array((string) ($secret['profile'] ?? ''), $allowedProfiles, true)) {
+                            throw new RuntimeException('Profil secret PPP tidak cocok dengan profil pelanggan yang dikenal. Periksa akun di MikroTik sebelum menghapus data billing.');
+                        }
+                    }
+
+                    // Revoke any live session before attempting to remove the secret.
+                    // The session may survive if an operator already removed the secret.
+                    $routerOs->disconnectPppActive($router, $customer->pppoe_username);
+
+                    if ($matches->isNotEmpty()) {
+                        $routerOs->deletePppSecret($router, $customer->pppoe_username);
+                    }
+                }
+
+                if ($router->enabled && $customer->service_type === 'hotspot' && filled($customer->hotspot_username)) {
+                    // The RouterOS ownership comment must match this billing record.
+                    $routerOs->deleteManagedHotspotUser(
+                        $router,
+                        $customer->hotspot_username,
+                        'Billing customer '.$customer->customer_code,
+                    );
+                }
+            }
+
+            DB::transaction(function () use ($customer): void {
+                Onu::query()->where('customer_id', $customer->id)->update(['customer_id' => null]);
+                FupState::query()->where('customer_id', $customer->id)->delete();
+                $customer->delete();
+            });
+
+            Audit::log('customer.deleted', Customer::class, $customer->id, [
+                'code' => $customer->customer_code,
+                'service_type' => $customer->service_type,
+            ]);
+
+            return redirect()->route('customers.index')->with('success', 'Pelanggan dihapus. Akun layanan yang dikelola billing sudah dibersihkan dari MikroTik.');
+        } catch (\Throwable $exception) {
+            Log::warning('Customer deletion blocked or failed', [
+                'customer_id' => $customer->id,
+                'router_id' => $customer->router_id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return redirect()->route('customers.index')
+                ->with('warning', 'Pelanggan belum dihapus. Periksa status layanan, koneksi router, dan log aplikasi.');
+        }
+    }
+
     private function syncPppSecret(Customer $customer, RouterOsService $routerOs, ?string $previousUsername = null): void
     {
-        if ($customer->service_type !== 'pppoe' || $customer->status === 'trial') {
+        if ($customer->service_type !== 'pppoe') {
             return;
         }
+
+        // Trial records need no router. If an existing PPP account on the same
+        // router is being downgraded to trial, disable it rather than leave it online.
+        if ($customer->status === 'trial') {
+            if (filled($previousUsername) && $customer->router) {
+                $routerOs->enablePppSecret($customer->router, $previousUsername, false);
+                $routerOs->disconnectPppActive($customer->router, $previousUsername);
+            }
+            return;
+        }
+
         if (!$customer->router_id || !$customer->router) {
             throw new RuntimeException('Pilih router MikroTik untuk layanan PPPoE.');
         }
+
         if (blank($customer->pppoe_username) || blank($customer->pppoe_password)) {
             throw new RuntimeException('Username dan password PPP harus tersedia.');
+        }
+
+        $package = $customer->package;
+        if (!$package || (int) $package->router_id !== (int) $customer->router_id) {
+            throw new RuntimeException('Paket PPP harus ditautkan ke router yang sama dengan pelanggan.');
+        }
+        if (in_array($package->sync_status, ['pending', 'failed'], true)) {
+            throw new RuntimeException('Profil paket PPP belum berhasil disinkronkan. Buka menu Paket PPPoE lalu tekan Sinkron ulang.');
+        }
+
+        $state = FupState::query()
+            ->where('customer_id', $customer->id)
+            ->where('period', app(FupService::class)->currentPeriod())
+            ->first();
+
+        $fupEnabled = $customer->fup_override !== null
+            ? (bool) $customer->fup_override
+            : ((bool) $customer->fup_enabled || (bool) $package->fup_enabled);
+        $fupProfile = filled($customer->fup_speed_after)
+            && ($customer->fup_override === true || ($customer->fup_override === null && $customer->fup_enabled))
+            ? $customer->fup_speed_after
+            : $package->fup_speed_after;
+
+        if ($customer->status === 'isolated') {
+            if (config('billing.isolation_method') === 'disable') {
+                $targetProfile = $package->normal_profile;
+            } else {
+                $targetProfile = $customer->pppoe_profile_isolir ?: config('billing.isolation_profile');
+            }
+        } elseif ($customer->status === 'active' && $fupEnabled && $state?->limited && filled($fupProfile)) {
+            $targetProfile = $fupProfile;
+        } else {
+            $targetProfile = $package->normal_profile;
+        }
+
+        if (blank($targetProfile)) {
+            throw new RuntimeException('Profil PPP tujuan belum dikonfigurasi pada paket pelanggan.');
         }
 
         $routerOs->createOrUpdatePppSecret($customer->router, [
             'name' => $customer->pppoe_username,
             'password' => $customer->pppoe_password,
-            'profile' => $customer->package?->normal_profile ?: 'default',
+            'profile' => $targetProfile,
         ], $previousUsername);
+
+        if ($customer->status === 'isolated' && config('billing.isolation_method') === 'disable') {
+            $routerOs->enablePppSecret($customer->router, $customer->pppoe_username, false);
+            $routerOs->disconnectPppActive($customer->router, $customer->pppoe_username);
+        } elseif (in_array($customer->status, ['suspended', 'terminated'], true)) {
+            $routerOs->enablePppSecret($customer->router, $customer->pppoe_username, false);
+            $routerOs->disconnectPppActive($customer->router, $customer->pppoe_username);
+        } elseif ($customer->status === 'isolated') {
+            $routerOs->disconnectPppActive($customer->router, $customer->pppoe_username);
+        } elseif ($customer->status === 'active') {
+            // Re-enable a PPP secret when an operator changes an isolated customer back to active.
+            $routerOs->enablePppSecret($customer->router, $customer->pppoe_username, true);
+        }
+
+        // If an operator turned off FUP while editing this customer, keep the RouterOS
+        // profile in sync now rather than waiting for the scheduled collector.
+        if ($customer->status === 'active' && $state?->limited
+            && (!$fupEnabled || blank($fupProfile))) {
+            $state->update(['limited' => false]);
+        }
+    }
+
+    private function syncHotspotUser(Customer $customer, RouterOsService $routerOs, ?string $previousUsername = null): void
+    {
+        if ($customer->service_type !== 'hotspot') {
+            return;
+        }
+
+        if (! $customer->router_id || ! $customer->router) {
+            throw new RuntimeException('Pilih router MikroTik untuk layanan Hotspot.');
+        }
+
+        if ($customer->status === 'trial') {
+            if (filled($previousUsername)) {
+                $routerOs->setManagedHotspotUserEnabled($customer->router, $previousUsername, false, 'Billing customer '.$customer->customer_code);
+                $routerOs->disconnectHotspotActive($customer->router, $previousUsername);
+            }
+            return;
+        }
+
+        $profile = $customer->hotspotProfile;
+        if (! $profile || (int) $profile->router_id !== (int) $customer->router_id) {
+            throw new RuntimeException('Pilih profil Hotspot yang dikelola billing dan terhubung ke router pelanggan.');
+        }
+        if (! $profile->enabled) {
+            throw new RuntimeException('Profil Hotspot ini sudah dinonaktifkan. Pilih profil aktif sebelum menyimpan pelanggan.');
+        }
+
+        if (blank($customer->hotspot_username) || blank($customer->hotspot_password)) {
+            throw new RuntimeException('Username dan password Hotspot harus tersedia.');
+        }
+
+        // Treat billing as the source of truth: push current profile settings before assigning users.
+        $routerOs->syncHotspotProfile($profile->fresh('router'));
+        $profile->update([
+            'sync_status' => 'synced',
+            'sync_error' => null,
+            'last_synced_at' => now(),
+        ]);
+
+        $active = $customer->status === 'active';
+        $routerOs->createOrUpdateHotspotUser(
+            $customer->router,
+            $customer->hotspot_username,
+            $customer->hotspot_password,
+            $profile->routerProfileName(),
+            'Billing customer '.$customer->customer_code,
+            $previousUsername,
+            $active,
+            'Billing customer '.$customer->customer_code,
+        );
+
+        if (! $active) {
+            $routerOs->disconnectHotspotActive($customer->router, $customer->hotspot_username);
+        }
     }
 
     private function syncOnu(Customer $customer, ?int $onuId): void
@@ -267,6 +816,7 @@ class CustomerController extends Controller
         $service = $r->input('service_type');
         $status = $r->input('status');
         $needsPppSetup = $service === 'pppoe' && $status !== 'trial';
+        $needsHotspotSetup = $service === 'hotspot' && $status !== 'trial';
         $needsPppPassword = $needsPppSetup && ($creating || ($customer?->status === 'trial' && blank($customer?->pppoe_password)));
         $rawWhatsapp = $r->input('whatsapp_number');
         $normalizedWhatsapp = WhatsappNumber::normalize(is_string($rawWhatsapp) ? $rawWhatsapp : null);
@@ -301,7 +851,7 @@ class CustomerController extends Controller
             'due_day' => 'required|integer|min:1|max:28',
             'grace_days' => 'nullable|integer|min:0|max:31',
             'activated_at' => 'nullable|date',
-            'router_id' => [$needsPppSetup ? 'required' : 'nullable', 'exists:routers,id'],
+            'router_id' => [$needsPppSetup || $service === 'hotspot' ? 'required' : 'nullable', 'exists:routers,id'],
             'package_id' => ['required', 'exists:packages,id'],
             'pppoe_username' => [$needsPppSetup ? 'required' : 'nullable', 'max:120', Rule::unique('customers', 'pppoe_username')->ignore($customer?->id)],
             'pppoe_password' => [$needsPppPassword ? 'required' : 'nullable', 'string', 'max:255'],
@@ -311,6 +861,11 @@ class CustomerController extends Controller
             'pppoe_profile_isolir' => 'nullable|max:120',
             'hotspot_username' => [$service === 'hotspot' ? 'required' : 'nullable', 'max:120', Rule::unique('customers', 'hotspot_username')->ignore($customer?->id)],
             'hotspot_password' => [$service === 'hotspot' && $creating ? 'required' : 'nullable', 'string', 'max:255'],
+            'hotspot_profile_id' => [
+                $needsHotspotSetup ? 'required' : 'nullable',
+                'integer',
+                Rule::exists('hotspot_profiles', 'id')->where(fn ($query) => $query->where('router_id', (int) $r->input('router_id'))),
+            ],
             'olt_name' => 'nullable|max:120',
             'pon_port' => 'nullable|max:50',
             'onu_id' => 'nullable|max:50',
@@ -323,7 +878,37 @@ class CustomerController extends Controller
             'portal_password' => ['nullable', 'string', 'size:8', 'regex:/^[A-Za-z0-9]{8}$/'],
         ]);
 
+        if ($service === 'hotspot') {
+            $managedProfile = filled($data['hotspot_profile_id'] ?? null)
+                ? HotspotProfile::query()->whereKey($data['hotspot_profile_id'])
+                    ->where('router_id', (int) ($data['router_id'] ?? 0))->first()
+                : null;
+
+            if ($needsHotspotSetup && ! $managedProfile) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'hotspot_profile_id' => 'Pilih profil Hotspot yang sudah dibuat dari menu Hotspot.',
+                ]);
+            }
+            if ($needsHotspotSetup && $managedProfile && ! $managedProfile->enabled) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'hotspot_profile_id' => 'Profil ini dinonaktifkan. Pilih profil Hotspot yang aktif.',
+                ]);
+            }
+
+            $data['hotspot_profile'] = $managedProfile?->name;
+            $data['hotspot_profile_id'] = $managedProfile?->id;
+        } else {
+            $data['hotspot_profile'] = null;
+            $data['hotspot_profile_id'] = null;
+        }
+
         $selectedPackage = Package::findOrFail($data['package_id']);
+        if ($service === 'pppoe' && ($data['fup_mode'] ?? 'inherit') === 'on'
+            && (!$selectedPackage->fup_enabled || (int) $selectedPackage->fup_limit_bytes <= 0 || blank($selectedPackage->fup_speed_after))) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'fup_mode' => 'FUP pelanggan memerlukan paket dengan batas kuota dan profil FUP yang sudah dikonfigurasi. Atur FUP pada menu Paket PPPoE terlebih dahulu.',
+            ]);
+        }
         if ($service === 'pppoe' && $status !== 'trial') {
             if (!$selectedPackage->router_id) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
@@ -343,9 +928,16 @@ class CustomerController extends Controller
             $data['pppoe_profile_normal'] = $selectedPackage->normal_profile;
             $data['fup_speed_after'] = $selectedPackage->fup_speed_after;
         }
-        $data['portal_password'] = filled($data['portal_password'] ?? null)
-            ? $data['portal_password']
-            : CustomerIdentity::newPortalPassword();
+        if (filled($data['portal_password'] ?? null)) {
+            // The admin explicitly supplied a replacement portal password.
+            $data['portal_password'] = $data['portal_password'];
+        } elseif ($creating) {
+            // Generate and show the initial portal credential only on customer creation.
+            $data['portal_password'] = CustomerIdentity::newPortalPassword();
+        } else {
+            // An empty field on edit means “keep the existing portal password”.
+            unset($data['portal_password']);
+        }
 
         $fupMode = $data['fup_mode'];
         unset($data['fup_mode']);

@@ -65,13 +65,45 @@
                         <td>{{ $r->last_seen_at && $r->last_seen_at->gt(now()->subMinutes(10)) ? 'Online' : 'Unknown' }}</td>
                         <td>{{ $r->last_seen_at }}</td>
                         <td class="d-flex flex-wrap gap-1">
+                            <details class="w-100">
+                                <summary class="btn btn-sm btn-outline-secondary">Edit data router</summary>
+                                <form method="POST" action="{{ route('routers.update', $r) }}" class="card card-body mt-2 d-grid gap-2">
+                                    @csrf
+                                    @method('PUT')
+                                    <label class="form-label mb-0" for="router-name-{{ $r->id }}">Nama router</label>
+                                    <input id="router-name-{{ $r->id }}" name="name" value="{{ $r->name }}" class="form-control form-control-sm" maxlength="100" required>
+                                    <label class="form-label mb-0" for="router-host-{{ $r->id }}">IP / Host</label>
+                                    <input id="router-host-{{ $r->id }}" name="host" value="{{ $r->host }}" class="form-control form-control-sm" maxlength="255" required>
+                                    <label class="form-label mb-0" for="router-port-{{ $r->id }}">Port API</label>
+                                    <input id="router-port-{{ $r->id }}" name="port" type="number" min="1" max="65535" value="{{ $r->port }}" class="form-control form-control-sm" required>
+                                    <label class="form-label mb-0" for="router-user-{{ $r->id }}">API username</label>
+                                    <input id="router-user-{{ $r->id }}" name="username" value="{{ $r->username }}" class="form-control form-control-sm" maxlength="100" required>
+                                    <label class="form-label mb-0" for="router-password-{{ $r->id }}">Password baru (opsional)</label>
+                                    <input id="router-password-{{ $r->id }}" name="password" type="password" class="form-control form-control-sm" autocomplete="new-password" placeholder="Kosongkan jika tidak diubah">
+                                    <label class="form-label mb-0" for="router-notes-{{ $r->id }}">Catatan</label>
+                                    <textarea id="router-notes-{{ $r->id }}" name="notes" class="form-control form-control-sm" rows="2">{{ $r->notes }}</textarea>
+                                    <div class="d-flex flex-wrap gap-3">
+                                        <div class="form-check">
+                                            <input type="hidden" name="ssl" value="0">
+                                            <input class="form-check-input" id="router-ssl-{{ $r->id }}" type="checkbox" name="ssl" value="1" @checked($r->ssl)>
+                                            <label class="form-check-label" for="router-ssl-{{ $r->id }}">API-SSL</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input type="hidden" name="enabled" value="0">
+                                            <input class="form-check-input" id="router-enabled-{{ $r->id }}" type="checkbox" name="enabled" value="1" @checked($r->enabled)>
+                                            <label class="form-check-label" for="router-enabled-{{ $r->id }}">Aktifkan router</label>
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-sm btn-primary">Simpan perubahan</button>
+                                </form>
+                            </details>
                             <form method="POST" action="{{ route('routers.traffic-interface', $r) }}" class="d-inline-flex gap-1">
                                 @csrf @method('PATCH')
                                 <input name="traffic_interface" value="{{ $r->traffic_interface }}" placeholder="WAN interface" class="form-control form-control-sm" required>
                                 <button class="btn btn-sm btn-outline-info">Simpan interface</button>
                             </form>
                             <form method="POST" action="{{ route('routers.test', $r) }}" class="d-inline">@csrf<button class="btn btn-sm btn-outline-success">Test</button></form>
-                            <form method="POST" action="{{ route('routers.destroy', $r) }}" class="d-inline">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" onclick="return confirm('Hapus router?')">Hapus</button></form>
+                            <form method="POST" action="{{ route('routers.destroy', $r) }}" class="d-inline">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" onclick="return confirm('Hapus router ini? Penghapusan ditolak jika masih dipakai pelanggan, paket, profil, atau voucher.')">Hapus</button></form>
                         </td>
                     </tr>
                 @empty

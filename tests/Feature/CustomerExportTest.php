@@ -89,6 +89,7 @@ class CustomerExportTest extends TestCase
             'customer_code' => 'HS-IMPORT-001',
             'service_type' => 'hotspot',
             'hotspot_username' => 'hotspot-import-user',
+            'hotspot_profile' => 'default',
             'pppoe_username' => null,
             'package_id' => $package->id,
         ]);

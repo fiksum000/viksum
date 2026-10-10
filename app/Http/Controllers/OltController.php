@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Olt;
+use App\Models\Customer;
 use App\Support\Audit;
 use Illuminate\Http\Request;
 
@@ -32,8 +33,12 @@ class OltController extends Controller
 
     public function destroy(Olt $olt)
     {
+        if ($olt->onus()->exists() || Customer::where('olt_id', $olt->id)->exists()) {
+            return back()->with('warning', 'OLT masih memiliki ONU atau relasi pelanggan. Pindahkan relasi atau hapus inventaris ONU terlebih dahulu.');
+        }
+
         Audit::log('olt.deleted', Olt::class, $olt->id);
         $olt->delete();
-        return back()->with('success', 'OLT dan inventaris ONU terkait dihapus.');
+        return back()->with('success', 'OLT yang tidak memiliki relasi ONU/pelanggan berhasil dihapus.');
     }
 }

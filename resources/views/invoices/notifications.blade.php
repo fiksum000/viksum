@@ -23,7 +23,7 @@
 
 <div class="card card-body">
     <div class="table-responsive"><table class="table table-hover align-middle mb-0">
-        <thead><tr><th>Waktu</th><th>Pelanggan</th><th>Invoice</th><th>Tujuan WhatsApp</th><th>Jenis</th><th>Status</th><th>Detail / alasan</th></tr></thead>
+        <thead><tr><th>Waktu</th><th>Pelanggan</th><th>Invoice</th><th>Tujuan WhatsApp</th><th>Jenis</th><th>Status</th><th>Detail / alasan</th><th>Aksi</th></tr></thead>
         <tbody>
         @forelse($notifications as $notification)
             @php
@@ -51,9 +51,19 @@
                     @else<span class="text-muted">Belum ada detail dari gateway.</span>@endif
                     @if($latestLog?->message)<details class="small mt-1"><summary class="link-info">Lihat isi pesan</summary><div class="mt-1 text-break">{{ $latestLog->message }}</div></details>@endif
                 </td>
+                <td class="text-nowrap">
+                    @if($notification->status === 'failed' && in_array($billingUser?->role, ['super_admin', 'admin'], true) && in_array($notification->event, ['billing_reminder', 'isolation_warning', 'payment_success', 'isolation'], true))
+                        <form method="POST" action="{{ route('invoices.notifications.retry', $notification) }}" onsubmit="return confirm('Coba kirim ulang notifikasi ini ke nomor WhatsApp pelanggan saat ini? Sistem akan memeriksa status invoice dan layanan terlebih dahulu.')">
+                            @csrf
+                            <button type="submit" class="btn btn-sm btn-outline-warning">Kirim ulang</button>
+                        </form>
+                    @else
+                        <span class="text-muted">—</span>
+                    @endif
+                </td>
             </tr>
         @empty
-            <tr><td colspan="7" class="text-center text-muted p-4">Belum ada riwayat notifikasi invoice.</td></tr>
+            <tr><td colspan="8" class="text-center text-muted p-4">Belum ada riwayat notifikasi invoice.</td></tr>
         @endforelse
         </tbody>
     </table></div>

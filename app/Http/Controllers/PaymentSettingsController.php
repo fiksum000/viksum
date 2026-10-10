@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\PaymentSetting;
 use App\Support\Audit;
+use App\Services\TripayService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class PaymentSettingsController
@@ -25,6 +27,27 @@ class PaymentSettingsController
         ]);
     }
 
+    public function checkTripay(TripayService $tripay)
+    {
+        try {
+            $channels = $tripay->checkConnection();
+            $count = count($channels);
+            return back()->with('tripay_check', [
+                'ok' => true,
+                'count' => $count,
+                'message' => $count > 0
+                    ? "Koneksi Tripay berhasil. {$count} kanal pembayaran aktif ditemukan."
+                    : 'Koneksi berhasil, tetapi belum ada kanal pembayaran aktif.',
+            ]);
+        } catch (\Throwable $exception) {
+            Log::warning('Tripay connection check failed', ['error' => $exception->getMessage()]);
+            return back()->with('tripay_check', [
+                'ok' => false,
+                'count' => null,
+                'message' => 'Tes koneksi belum berhasil. Periksa pengaturan koneksi dan coba lagi.',
+            ]);
+        }
+    }
     public function update(Request $request)
     {
         $settings = PaymentSetting::query()->first() ?? new PaymentSetting();

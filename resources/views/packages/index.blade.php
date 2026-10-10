@@ -1,175 +1,256 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="mb-3">
-    <h1 class="mb-1">Paket Internet</h1>
-    <p class="text-muted mb-0">Paket billing ditautkan langsung ke router dan profil PPP yang sudah ada. Form ini hanya membaca profil dari MikroTik; tidak membuat atau mengubah profil router.</p>
+<div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-4">
+    <div>
+        <h1 class="h3 mb-1">Paket PPPoE</h1>
+        <p class="text-secondary mb-0">Buat dan atur profil internet langsung dari billing. Paket akan mengirim kecepatan dan aturan FUP ke MikroTik secara otomatis.</p>
+    </div>
+    <span class="badge text-bg-dark">{{ $packages->count() }} paket</span>
 </div>
 
-@php
-    $packagesNeedingMapping = $packages->filter(fn ($package) =>
-        !$package->router_id || blank($package->normal_profile) || ($package->fup_enabled && blank($package->fup_speed_after))
-    );
-@endphp
-@if($packagesNeedingMapping->isNotEmpty())
-    <div class="alert alert-warning" role="alert">
-        <strong>Pemetaan paket belum lengkap.</strong> Paket di bawah ini belum siap dipakai untuk provisioning PPP atau FUP sampai dipetakan ke profil yang benar-benar tersedia di router.
-        <ul class="mb-0 mt-2">
-            @foreach($packagesNeedingMapping as $package)
-                <li>
-                    <strong>{{ $package->name }}</strong>:
-                    @if(!$package->router_id)
-                        Router belum ditautkan; profil normal “{{ $package->normal_profile }}” belum diverifikasi di router.
-                        @if($package->fup_enabled && filled($package->fup_speed_after))
-                            Profil FUP “{{ $package->fup_speed_after }}” juga belum diverifikasi di router.
-                        @elseif($package->fup_enabled)
-                            Profil setelah FUP belum dipilih.
-                        @endif
-                    @elseif(blank($package->normal_profile))
-                        Profil normal belum dipilih.
-                    @endif
-                    @if($package->router_id && $package->fup_enabled && blank($package->fup_speed_after))
-                        Profil setelah FUP belum dipilih.
-                    @endif
-                </li>
-            @endforeach
-        </ul>
+@if(session('success'))<div class="alert alert-success" role="status">{{ session('success') }}</div>@endif
+@if(session('warning'))<div class="alert alert-warning" role="status">{{ session('warning') }}</div>@endif
+@if(session('error'))<div class="alert alert-danger" role="alert">{{ session('error') }}</div>@endif
+@if($errors->any())
+    <div class="alert alert-danger">
+        <strong>Periksa input berikut:</strong>
+        <ul class="mb-0 mt-1">@foreach($errors->all() as $error)<li>{{ $error }}</li>@endforeach</ul>
     </div>
 @endif
 
-<div class="row g-3 mt-1">
-    <div class="col-lg-5">
-        <form method="POST" action="{{ route('packages.store') }}" class="card card-body" id="new-package-form">
-            @csrf
-            <h2 class="h5">Tambah paket dan pemetaan PPP</h2>
-            <label class="form-label" for="new-name">Nama paket billing</label>
-            <input id="new-name" name="name" class="form-control mb-2" value="{{ old('name') }}" placeholder="Contoh: Internet 20 Mbps" required>
-            <label class="form-label" for="new-price">Harga bulanan</label>
-            <input id="new-price" name="price" type="number" min="0" class="form-control mb-2" value="{{ old('price') }}" placeholder="Harga" required>
-            <label class="form-label" for="new-router">Router PPP</label>
-            <select id="new-router" name="router_id" class="form-select mb-2 router-select" required>
-                <option value="">Pilih router</option>
-                @foreach($routers as $router)<option value="{{ $router->id }}">{{ $router->name }} — {{ $router->host }}:{{ $router->port }}</option>@endforeach
-            </select>
-            <label class="form-label" for="new-profile">Profil PPP di router</label>
-            <select id="new-profile" name="normal_profile" class="form-select mb-2 profile-select" data-selected="{{ old('normal_profile') }}" required disabled>
-                <option value="">Pilih router lebih dulu</option>
-            </select>
-            <div class="form-text mb-2 profile-status" role="status">Profil akan dimuat dari router secara read-only.</div>
-            <label class="form-label" for="new-speed">Kecepatan (catatan)</label>
-            <input id="new-speed" name="normal_speed" class="form-control mb-2" value="{{ old('normal_speed') }}" placeholder="Opsional, contoh 20 Mbps">
-            <label class="form-label" for="new-fup-limit">Batas FUP (GB)</label>
-            <input id="new-fup-limit" type="number" min="0" step="0.1" class="form-control mb-2" placeholder="Opsional">
-            <input type="hidden" name="fup_limit_bytes" id="new-fup-bytes" value="{{ old('fup_limit_bytes') }}">
-            <label class="form-label" for="new-fup-profile">Profil PPP setelah FUP</label>
-            <select id="new-fup-profile" name="fup_speed_after" class="form-select mb-2 fup-profile-select" data-selected="{{ old('fup_speed_after') }}" disabled><option value="">Pilih router lebih dulu</option></select>
-            <input name="priority" type="hidden" value="8">
-            <div class="form-check"><input name="fup_enabled" value="0" type="hidden"><input name="fup_enabled" value="1" type="checkbox" class="form-check-input" id="new-fup"><label class="form-check-label" for="new-fup">Aktifkan FUP</label></div>
-            <button class="btn btn-primary mt-3">Simpan paket</button>
-        </form>
-    </div>
-
-    <div class="col-lg-7">
-        <div class="card card-body">
-            <h2 class="h5">Paket billing ↔ profil PPP</h2>
-            <div class="table-responsive"><table class="table align-middle">
-                <thead><tr><th>Paket</th><th>Router / Profil PPP</th><th>FUP</th><th></th></tr></thead>
-                <tbody>
-                @forelse($packages as $package)
-                    <tr>
-                        <td><strong>{{ $package->name }}</strong><br><span class="text-muted">Rp {{ number_format($package->price, 0, ',', '.') }}/bulan</span></td>
-                        <td>{{ $package->router?->name ?? 'Belum ditautkan' }}<br><code>{{ $package->normal_profile }}</code>@if(!$package->router_id)<br><span class="text-warning">Belum diverifikasi di router</span>@endif</td>
-                        <td>
-                            @if(!$package->fup_enabled)
-                                Tidak aktif
-                            @elseif(blank($package->fup_speed_after))
-                                <span class="text-warning">Aktif — profil FUP belum dipilih</span>
-                            @elseif(!$package->router_id)
-                                <span class="text-warning">Aktif — <code>{{ $package->fup_speed_after }}</code> belum diverifikasi di router</span>
-                            @else
-                                Aktif<br><code>{{ $package->fup_speed_after }}</code>
-                            @endif
-                        </td>
-                        <td><details><summary class="btn btn-sm btn-outline-light">Edit</summary>
-                            <form method="POST" action="{{ route('packages.update', $package) }}" class="card card-body mt-2 package-edit-form" style="min-width: 280px">
-                                @csrf @method('PUT')
-                                <label class="form-label">Nama paket</label><input name="name" class="form-control mb-2" value="{{ $package->name }}" required>
-                                <label class="form-label">Harga bulanan</label><input name="price" type="number" min="0" class="form-control mb-2" value="{{ $package->price }}" required>
-                                <label class="form-label">Router PPP</label><select name="router_id" class="form-select mb-2 router-select" required>
-                                    <option value="">Pilih router</option>@foreach($routers as $router)<option value="{{ $router->id }}" @selected($package->router_id === $router->id)>{{ $router->name }} — {{ $router->host }}</option>@endforeach
-                                </select>
-                                <label class="form-label">Profil PPP</label><select name="normal_profile" class="form-select mb-1 profile-select" data-selected="{{ $package->normal_profile }}" required disabled><option value="">Memuat profil…</option></select>
-                                <div class="form-text mb-2 profile-status" role="status"></div>
-                                <label class="form-label">Kecepatan (catatan)</label><input name="normal_speed" class="form-control mb-2" value="{{ $package->normal_speed }}">
-                                <label class="form-label">Batas FUP (GB)</label><input type="number" min="0" step="0.1" class="form-control mb-2 fup-gb" value="{{ $package->fup_limit_bytes ? round($package->fup_limit_bytes / 1073741824, 2) : '' }}">
-                                <input type="hidden" name="fup_limit_bytes" class="fup-bytes" value="{{ $package->fup_limit_bytes }}">
-                                <label class="form-label">Profil PPP setelah FUP</label><select name="fup_speed_after" class="form-select mb-2 fup-profile-select" data-selected="{{ $package->fup_speed_after }}" disabled><option value="">Memuat profil…</option></select>
-                                <input name="priority" type="hidden" value="{{ $package->priority }}">
-                                <div class="form-check"><input name="fup_enabled" value="0" type="hidden"><input name="fup_enabled" value="1" type="checkbox" class="form-check-input" id="fup-{{ $package->id }}" @checked($package->fup_enabled)><label class="form-check-label" for="fup-{{ $package->id }}">Aktifkan FUP</label></div>
-                                <button class="btn btn-primary btn-sm mt-2">Simpan pemetaan</button>
-                            </form>
-                        </details>
-                        <form method="POST" action="{{ route('packages.destroy', $package) }}" class="mt-1">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger" onclick="return confirm('Hapus paket ini?')">Hapus</button></form></td>
-                    </tr>
-                @empty<tr><td colspan="4" class="text-center text-muted p-4">Belum ada paket.</td></tr>@endforelse
-                </tbody>
-            </table></div>
-        </div>
-    </div>
+<div class="row g-3 mb-4">
+    <div class="col-6 col-xl-3"><div class="card card-body h-100"><span class="text-secondary small">Paket dikelola billing</span><span class="display-6 fw-semibold">{{ $packages->where('sync_status', 'synced')->count() }}</span></div></div>
+    <div class="col-6 col-xl-3"><div class="card card-body h-100"><span class="text-secondary small">Paket lama / manual</span><span class="display-6 fw-semibold">{{ $packages->where('sync_status', 'legacy')->count() }}</span></div></div>
+    <div class="col-6 col-xl-3"><div class="card card-body h-100"><span class="text-secondary small">Butuh sinkronisasi</span><span class="display-6 fw-semibold">{{ $packages->whereIn('sync_status', ['failed', 'pending'])->count() }}</span></div></div>
+    <div class="col-6 col-xl-3"><div class="card card-body h-100"><span class="text-secondary small">Total pelanggan</span><span class="display-6 fw-semibold">{{ number_format($packages->sum('customers_count')) }}</span></div></div>
 </div>
 
-<script>
-(() => {
-    const profileUrl = @json(url('/routers'));
-    document.querySelectorAll('.router-select').forEach((routerSelect) => {
-        const form = routerSelect.closest('form');
-        const profileSelect = form.querySelector('.profile-select');
-        const status = form.querySelector('.profile-status');
-        const loadProfiles = async () => {
-            const previous = profileSelect.dataset.selected || profileSelect.value;
-            profileSelect.replaceChildren(new Option(routerSelect.value ? 'Memuat profil…' : 'Pilih router lebih dulu', ''));
-            profileSelect.disabled = true;
-            if (!routerSelect.value) { status.textContent = 'Pilih router aktif untuk melihat profil yang tersedia.'; return; }
-            status.textContent = 'Membaca daftar profil dari router…';
-            try {
-                const response = await fetch(profileUrl + '/' + encodeURIComponent(routerSelect.value) + '/ppp-profiles/options', {headers: {Accept: 'application/json'}, credentials: 'same-origin'});
-                const payload = await response.json();
-                if (!response.ok) throw new Error(payload.message || 'Profil tidak dapat dibaca.');
-                profileSelect.replaceChildren(new Option('Pilih profil PPP', ''));
-                payload.profiles.forEach((name) => profileSelect.add(new Option(name, name, false, name === previous)));
-                profileSelect.disabled = false;
-                const fupSelect = form.querySelector('.fup-profile-select');
-                if (fupSelect) {
-                    const fupPrevious = fupSelect.dataset.selected || fupSelect.value;
-                    fupSelect.replaceChildren(new Option('Pilih profil setelah FUP (opsional)', ''));
-                    payload.profiles.forEach((name) => fupSelect.add(new Option(name, name, false, name === fupPrevious)));
-                    fupSelect.disabled = false;
-                }
-                if (fupSelect?.dataset.selected && !payload.profiles.includes(fupSelect.dataset.selected)) status.textContent = 'Profil FUP “' + fupSelect.dataset.selected + '” tidak ditemukan di router ini; pilih profil yang tersedia.';
-                else if (previous && !payload.profiles.includes(previous)) status.textContent = 'Profil tersimpan “' + previous + '” tidak ditemukan di router ini. Pilih profil yang tersedia.';
-                else status.textContent = payload.profiles.length ? payload.profiles.length + ' profil tersedia; data hanya dibaca dari MikroTik.' : 'Router belum memiliki profil PPP.';
-            } catch (error) {
-                profileSelect.replaceChildren(new Option('Profil gagal dimuat', ''));
-                status.textContent = error.message;
-            }
-        };
-        routerSelect.addEventListener('change', () => {
-            profileSelect.dataset.selected = '';
-            const fupSelect = form.querySelector('.fup-profile-select');
-            if (fupSelect) fupSelect.dataset.selected = '';
-            loadProfiles();
-        });
-        loadProfiles();
-    });
+<div class="card card-body mb-4">
+    <div class="mb-3">
+        <h2 class="h5 mb-1">Buat paket baru</h2>
+        <p class="text-secondary small mb-0">Kamu tidak perlu membuat profil terlebih dahulu di Winbox. Billing membuat profil PPP normal dan profil FUP (bila diaktifkan) dengan nama internal tersendiri.</p>
+    </div>
+    <form method="POST" action="{{ route('packages.store') }}" class="row g-3">
+        @csrf
+        <div class="col-12 col-md-6 col-xl-4">
+            <label class="form-label" for="new-name">Nama paket</label>
+            <input id="new-name" name="name" class="form-control" value="{{ old('name') }}" placeholder="Contoh: Internet 20 Mbps" maxlength="100" required>
+        </div>
+        <div class="col-12 col-md-6 col-xl-2">
+            <label class="form-label" for="new-price">Harga bulanan (Rp)</label>
+            <input id="new-price" name="price" type="number" min="0" class="form-control" value="{{ old('price') }}" required>
+        </div>
+        <div class="col-12 col-md-6 col-xl-3">
+            <label class="form-label" for="new-router">Router MikroTik</label>
+            <select id="new-router" name="router_id" class="form-select" required>
+                <option value="">Pilih router</option>
+                @foreach($routers as $router)
+                    <option value="{{ $router->id }}" @selected((string)old('router_id') === (string)$router->id)>{{ $router->name }} — {{ $router->host }}:{{ $router->port }}</option>
+                @endforeach
+            </select>
+        </div>
+        <div class="col-6 col-md-3 col-xl-1">
+            <label class="form-label" for="new-upload">Upload</label>
+            <input id="new-upload" name="upload_speed" class="form-control" value="{{ old('upload_speed', '2M') }}" placeholder="2M" pattern="[0-9]+([.][0-9]+)?[kKmMgG]?" required>
+        </div>
+        <div class="col-6 col-md-3 col-xl-2">
+            <label class="form-label" for="new-download">Download</label>
+            <input id="new-download" name="download_speed" class="form-control" value="{{ old('download_speed', '10M') }}" placeholder="10M" pattern="[0-9]+([.][0-9]+)?[kKmMgG]?" required>
+        </div>
 
-    document.querySelectorAll('form').forEach((form) => {
-        const gb = form.querySelector('.fup-gb') || form.querySelector('#new-fup-limit');
-        const bytes = form.querySelector('.fup-bytes') || form.querySelector('#new-fup-bytes');
-        if (!gb || !bytes) return;
-        const syncBytes = () => { bytes.value = gb.value === '' ? '' : String(Math.round(Number(gb.value) * 1073741824)); };
-        gb.addEventListener('input', syncBytes);
-        syncBytes();
-    });
-})();
-</script>
+        <div class="col-12"><hr class="my-1"><h3 class="h6 mb-0">Pengaturan burst (opsional)</h3></div>
+        <div class="col-12 col-md-4">
+            <div class="form-check mb-2">
+                <input type="hidden" name="burst_enabled" value="0">
+                <input class="form-check-input" id="new-burst-enabled" type="checkbox" name="burst_enabled" value="1" @checked(old('burst_enabled'))>
+                <label class="form-check-label" for="new-burst-enabled">Aktifkan burst</label>
+            </div>
+            <div class="form-text">Burst memberi kecepatan sementara di atas batas normal bila threshold dan waktu burst terpenuhi.</div>
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label" for="new-burst-limit">Batas burst upload/download</label>
+            <input id="new-burst-limit" name="burst_limit" class="form-control" value="{{ old('burst_limit') }}" placeholder="5M/20M">
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label" for="new-burst-threshold">Threshold upload/download</label>
+            <input id="new-burst-threshold" name="burst_threshold" class="form-control" value="{{ old('burst_threshold') }}" placeholder="2M/10M">
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label" for="new-burst-time">Waktu burst</label>
+            <input id="new-burst-time" name="burst_time" class="form-control" value="{{ old('burst_time', '5s') }}" placeholder="5s" maxlength="8">
+        </div>
+        <div class="col-6 col-md-2">
+            <label class="form-label" for="new-priority">Prioritas</label>
+            <select id="new-priority" name="priority" class="form-select" required>
+                @for($p = 1; $p <= 8; $p++)<option value="{{ $p }}" @selected((string)old('priority', '8') === (string)$p)>{{ $p }}{{ $p === 1 ? ' (tertinggi)' : ($p === 8 ? ' (terendah)' : '') }}</option>@endfor
+            </select>
+        </div>
+
+        <div class="col-12"><hr class="my-1"><h3 class="h6 mb-0">Pengaturan FUP</h3></div>
+        <div class="col-12 col-md-3">
+            <div class="form-check mb-2">
+                <input type="hidden" name="fup_enabled" value="0">
+                <input class="form-check-input" id="new-fup-enabled" type="checkbox" name="fup_enabled" value="1" @checked(old('fup_enabled'))>
+                <label class="form-check-label" for="new-fup-enabled">Aktifkan FUP</label>
+            </div>
+            <div class="form-text">Jika kuota tercapai, billing mengganti profil PPP ke kecepatan FUP dan mencatat statusnya.</div>
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label" for="new-fup-limit">Batas FUP (GB)</label>
+            <input id="new-fup-limit" name="fup_limit_gb" type="number" min="0" step="0.1" class="form-control" value="{{ old('fup_limit_gb') }}" placeholder="Contoh 100">
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label" for="new-fup-upload">Upload setelah FUP</label>
+            <input id="new-fup-upload" name="fup_upload_speed" class="form-control" value="{{ old('fup_upload_speed') }}" placeholder="512k">
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label" for="new-fup-download">Download setelah FUP</label>
+            <input id="new-fup-download" name="fup_download_speed" class="form-control" value="{{ old('fup_download_speed') }}" placeholder="2M">
+        </div>
+        <div class="col-12 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <p class="text-secondary small mb-0">Kecepatan diisi dalam format seperti 2M, 512k. Upload/download mengikuti sudut pandang pelanggan.</p>
+            <button class="btn btn-primary px-4">Buat paket & sinkronkan ke MikroTik</button>
+        </div>
+    </form>
+</div>
+
+<div class="card card-body">
+    <div class="mb-3">
+        <h2 class="h5 mb-1">Paket billing</h2>
+        <p class="text-secondary small mb-0">Profil dengan awalan VIKSUM-PPP dibuat dan dimiliki aplikasi. Profil MikroTik lama tidak diubah otomatis; paket lama perlu diatur dan disimpan ulang untuk migrasi yang aman.</p>
+    </div>
+
+    @forelse($packages as $package)
+        <div class="border rounded-3 p-3 mb-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-3 mb-3">
+                <div>
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <h3 class="h6 mb-0">{{ $package->name }}</h3>
+                        @if($package->sync_status === 'synced' && !$package->sync_error)
+                            <span class="badge text-bg-success">Tersinkron</span>
+                        @elseif($package->sync_status === 'legacy')
+                            <span class="badge text-bg-secondary">Profil lama / manual</span>
+                        @elseif($package->sync_status === 'failed')
+                            <span class="badge text-bg-danger">Gagal sinkron</span>
+                        @else
+                            <span class="badge text-bg-warning">{{ ucfirst($package->sync_status) }}</span>
+                        @endif
+                    </div>
+                    <div class="text-secondary small mt-1">{{ $package->router?->name ?? 'Router belum ditautkan' }} · Rp {{ number_format($package->price, 0, ',', '.') }}/bulan · {{ $package->customers_count }} pelanggan</div>
+                    <div class="mt-2">
+                        <code>{{ $package->normal_profile }}</code>
+                        @if($package->fup_enabled) <span class="text-secondary small">→ FUP:</span> <code>{{ $package->fup_speed_after }}</code> @endif
+                    </div>
+                    <div class="text-secondary small mt-1">
+                        Normal {{ $package->upload_speed ?: '—' }} upload / {{ $package->download_speed ?: '—' }} download
+                        @if($package->fup_enabled)
+                            · FUP {{ $package->fup_limit_bytes ? number_format($package->fup_limit_bytes / 1073741824, 1).' GB' : 'belum ada kuota' }}
+                            ({{ $package->fup_upload_speed ?: '—' }} up / {{ $package->fup_download_speed ?: '—' }} down)
+                        @else
+                            · FUP tidak aktif
+                        @endif
+                    </div>
+                    @if($package->sync_error)<div class="small text-warning mt-2">{{ $package->sync_error }}</div>@endif
+                    @if($package->legacy_normal_profile && $package->sync_status !== 'legacy')<div class="small text-secondary mt-1">Profil lama tersimpan sebagai arsip: <code>{{ $package->legacy_normal_profile }}</code></div>@endif
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    @if($package->sync_status !== 'legacy')
+                        <form method="POST" action="{{ route('packages.sync', $package) }}">@csrf<button class="btn btn-sm btn-outline-primary">Sinkron ulang</button></form>
+                    @endif
+                    <form method="POST" action="{{ route('packages.destroy', $package) }}" onsubmit="return confirm('Hapus paket ini? Penghapusan ditolak jika pelanggan atau secret/profil MikroTik masih menggunakannya.')">@csrf @method('DELETE')<button class="btn btn-sm btn-outline-danger">Hapus</button></form>
+                </div>
+            </div>
+
+            <details>
+                <summary class="btn btn-sm btn-outline-light">Edit pengaturan paket</summary>
+                <form method="POST" action="{{ route('packages.update', $package) }}" class="row g-3 mt-2">
+                    @csrf @method('PUT')
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <label class="form-label" for="name-{{ $package->id }}">Nama paket</label>
+                        <input id="name-{{ $package->id }}" name="name" class="form-control" value="{{ $package->name }}" required>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" for="price-{{ $package->id }}">Harga bulanan (Rp)</label>
+                        <input id="price-{{ $package->id }}" name="price" type="number" min="0" class="form-control" value="{{ $package->price }}" required>
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <label class="form-label" for="router-{{ $package->id }}">Router MikroTik</label>
+                        <select id="router-{{ $package->id }}" name="router_id" class="form-select" required>
+                            @foreach($routers as $router)
+                                <option value="{{ $router->id }}" @selected((int)$package->router_id === (int)$router->id)>{{ $router->name }} — {{ $router->host }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    @if($package->sync_status === 'legacy')
+                        <div class="col-12"><div class="alert alert-info small mb-0">Paket ini masih menunjuk profil lama <code>{{ $package->normal_profile }}</code>. Isi upload/download yang benar di bawah untuk memindahkannya ke profil milik billing. Profil lama akan disimpan dan tidak akan ditimpa.</div></div>
+                    @endif
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" for="upload-{{ $package->id }}">Upload normal</label>
+                        <input id="upload-{{ $package->id }}" name="upload_speed" class="form-control" value="{{ $package->upload_speed }}" placeholder="2M" required>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" for="download-{{ $package->id }}">Download normal</label>
+                        <input id="download-{{ $package->id }}" name="download_speed" class="form-control" value="{{ $package->download_speed }}" placeholder="10M" required>
+                    </div>
+                    <div class="col-12 col-md-3">
+                        <div class="form-check mb-2 mt-md-4">
+                            <input type="hidden" name="burst_enabled" value="0">
+                            <input class="form-check-input" id="burst-enabled-{{ $package->id }}" type="checkbox" name="burst_enabled" value="1" @checked($package->burst_enabled)>
+                            <label class="form-check-label" for="burst-enabled-{{ $package->id }}">Aktifkan burst</label>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" for="burst-limit-{{ $package->id }}">Batas burst up/down</label>
+                        <input id="burst-limit-{{ $package->id }}" name="burst_limit" class="form-control" value="{{ $package->burst_limit }}" placeholder="5M/20M">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" for="burst-threshold-{{ $package->id }}">Threshold up/down</label>
+                        <input id="burst-threshold-{{ $package->id }}" name="burst_threshold" class="form-control" value="{{ $package->burst_threshold }}" placeholder="2M/10M">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" for="burst-time-{{ $package->id }}">Waktu burst</label>
+                        <input id="burst-time-{{ $package->id }}" name="burst_time" class="form-control" value="{{ $package->burst_time ?: '5s' }}" maxlength="8" required>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" for="priority-{{ $package->id }}">Prioritas</label>
+                        <select id="priority-{{ $package->id }}" name="priority" class="form-select" required>
+                            @for($p = 1; $p <= 8; $p++)<option value="{{ $p }}" @selected((int)$package->priority === $p)>{{ $p }}{{ $p === 1 ? ' (tertinggi)' : ($p === 8 ? ' (terendah)' : '') }}</option>@endfor
+                        </select>
+                    </div>
+
+                    <div class="col-12"><hr class="my-1"><h4 class="h6 mb-0">FUP</h4></div>
+                    <div class="col-12 col-md-3">
+                        <div class="form-check mb-2 mt-md-4">
+                            <input type="hidden" name="fup_enabled" value="0">
+                            <input class="form-check-input" id="fup-enabled-{{ $package->id }}" type="checkbox" name="fup_enabled" value="1" @checked($package->fup_enabled)>
+                            <label class="form-check-label" for="fup-enabled-{{ $package->id }}">Aktifkan FUP</label>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" for="fup-limit-{{ $package->id }}">Batas FUP (GB)</label>
+                        <input id="fup-limit-{{ $package->id }}" name="fup_limit_gb" type="number" min="0" step="0.1" class="form-control" value="{{ $package->fup_limit_bytes ? round($package->fup_limit_bytes / 1073741824, 2) : '' }}">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" for="fup-upload-{{ $package->id }}">Upload setelah FUP</label>
+                        <input id="fup-upload-{{ $package->id }}" name="fup_upload_speed" class="form-control" value="{{ $package->fup_upload_speed }}" placeholder="512k">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label class="form-label" for="fup-download-{{ $package->id }}">Download setelah FUP</label>
+                        <input id="fup-download-{{ $package->id }}" name="fup_download_speed" class="form-control" value="{{ $package->fup_download_speed }}" placeholder="2M">
+                    </div>
+                    <div class="col-12 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <p class="text-secondary small mb-0">Saat profil paket berubah, pelanggan aktif dapat diputus sebentar agar kecepatan baru diterapkan.</p>
+                        <button class="btn btn-primary">Simpan & sinkronkan</button>
+                    </div>
+                </form>
+            </details>
+        </div>
+    @empty
+        <div class="text-center text-secondary p-4">
+            <h3 class="h5">Belum ada paket</h3>
+            <p class="mb-0">Buat paket pertama melalui form di atas.</p>
+        </div>
+    @endforelse
+</div>
 @endsection

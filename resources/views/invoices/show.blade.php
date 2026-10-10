@@ -22,6 +22,19 @@
         @elseif ($invoice->status === 'paid')
             <span class="badge text-bg-success fs-6">LUNAS</span>
         @endif
+        @if ($invoice->status === 'paid' && in_array($billingUser?->role, ['super_admin', 'admin'], true))
+            <form method="POST" action="{{ route('invoices.retry-activation', $invoice) }}" class="mt-2" onsubmit="return confirm('Ulangi proses lanjutan untuk invoice lunas {{ $invoice->invoice_number }}? Invoice tidak akan ditagih ulang; sistem hanya mencoba antrekan aktivasi/notifikasi lagi.')">
+                @csrf
+                <button class="btn btn-outline-warning" type="submit">Ulangi proses lanjutan</button>
+            </form>
+            <div class="form-text">Gunakan jika layanan atau notifikasi belum diproses setelah pembayaran dicatat.</div>
+        @endif
+        @if (in_array($billingUser?->role, ['super_admin', 'admin'], true) && in_array($invoice->status, ['draft', 'unpaid'], true) && $invoice->payments->isEmpty())
+            <form method="POST" action="{{ route('invoices.cancel', $invoice) }}" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Batalkan invoice {{ $invoice->invoice_number }}? Tindakan ini tidak menghapus riwayat pelanggan.">
+                @csrf
+                <button class="btn btn-outline-danger mt-2" type="submit">Batalkan invoice</button>
+            </form>
+        @endif
     </div>
 </div>
 
@@ -63,12 +76,16 @@
     <section class="card mt-3">
         <div class="card-body">
             <h2 class="h5">Pembayaran Manual</h2>
+            @if ($invoice->payments->contains('provider', 'tripay') || filled($invoice->payment_reference) || filled($invoice->payment_url))
+                <div class="alert alert-warning mb-0">Invoice memiliki checkout atau riwayat Tripay. Periksa status transaksi gateway terlebih dahulu agar pembayaran manual tidak menyebabkan tagihan terbayar dua kali.</div>
+            @else
             <form method="POST" action="{{ route('invoices.manual-payment', $invoice) }}" class="row g-2">
                 @csrf
                 <div class="col-md-4"><label class="form-label" for="amount">Nominal</label><input id="amount" type="number" name="amount" class="form-control" value="{{ $invoice->total }}" min="1" required></div>
                 <div class="col-md-4"><label class="form-label" for="channel">Kanal pembayaran</label><input id="channel" name="channel" class="form-control" value="Cash" maxlength="50" required></div>
                 <div class="col-md-4 d-flex align-items-end"><button class="btn btn-warning w-100">Catat Lunas Manual</button></div>
             </form>
+            @endif
         </div>
     </section>
 

@@ -50,6 +50,37 @@ class TripayService
         return ['Authorization' => 'Bearer '.$this->value('tripay_api_key', 'services.tripay.api_key'), 'Accept' => 'application/json'];
     }
 
+    /**
+     * Fetch active payment channels directly from Tripay without using the cache.
+     * Used by the settings-page connection check so the admin can verify saved
+     * credentials and mode without creating a payment transaction.
+     */
+    public function checkConnection(): array
+    {
+        // Permit a connection check before the admin enables live checkout. This
+        // validates saved credentials/mode without creating a financial transaction.
+        if (blank($this->value('tripay_api_key', 'services.tripay.api_key'))
+            || blank($this->value('tripay_private_key', 'services.tripay.private_key'))
+            || blank($this->value('tripay_merchant_code', 'services.tripay.merchant_code'))) {
+            throw new RuntimeException('Kredensial Tripay belum lengkap. Simpan Merchant Code, API Key, dan Private Key terlebih dahulu.');
+        }
+
+        return $this->fetchAvailableChannels();
+    }
+
+    private function fetchAvailableChannels(): array
+    {
+        $response = Http::timeout(15)->withHeaders($this->headers())->get($this->baseUrl().'/merchant/payment-channel');
+        if ($response->failed() || ! ($response->json('success') ?? false)) {
+            throw new RuntimeException('Daftar channel Tripay tidak dapat dimuat. Periksa kredensial, mode, dan koneksi server.');
+        }
+
+        return collect($response->json('data', []))
+            ->filter(fn ($channel) => ($channel['active'] ?? false) === true)
+            ->map(fn ($channel) => ['code' => (string) $channel['code'], 'name' => (string) $channel['name']])
+            ->values()->all();
+    }
+
     public function availableChannels(): array
     {
         if (! $this->enabled()) {
@@ -57,17 +88,7 @@ class TripayService
         }
 
         $mode = $this->value('tripay_mode', 'services.tripay.mode');
-        return Cache::remember('tripay.channels.'.$mode, 300, function (): array {
-            $response = Http::timeout(15)->withHeaders($this->headers())->get($this->baseUrl().'/merchant/payment-channel');
-            if ($response->failed() || ! ($response->json('success') ?? false)) {
-                throw new RuntimeException('Daftar channel Tripay tidak dapat dimuat. Periksa kredensial, mode, dan koneksi server.');
-            }
-
-            return collect($response->json('data', []))
-                ->filter(fn ($channel) => ($channel['active'] ?? false) === true)
-                ->map(fn ($channel) => ['code' => (string) $channel['code'], 'name' => (string) $channel['name']])
-                ->values()->all();
-        });
+        return Cache::remember('tripay.channels.'.$mode, 300, fn (): array => $this->fetchAvailableChannels());
     }
 
     public function assertAvailableChannel(string $method): void
@@ -117,11 +138,15 @@ class TripayService
 
     public function verifyCallbackSignature(string $raw, ?string $signature): bool
     {
-        if (! $signature || ! $this->enabled()) {
+        // Checkout can be disabled while existing transactions are still settling.
+        // Callback authentication must therefore depend on the saved private key,
+        // not the switch that controls creation of new checkouts.
+        $privateKey = $this->value('tripay_private_key', 'services.tripay.private_key');
+        if (! $signature || blank($privateKey)) {
             return false;
         }
 
-        $expected = hash_hmac('sha256', $raw, (string) $this->value('tripay_private_key', 'services.tripay.private_key'));
+        $expected = hash_hmac('sha256', $raw, (string) $privateKey);
         return hash_equals($expected, $signature);
     }
 

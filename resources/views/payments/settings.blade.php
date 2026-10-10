@@ -4,6 +4,24 @@
 <h1>Pengaturan Pembayaran</h1>
 <p class="text-muted">Atur gateway Tripay dan QRIS DANA bisnis. Data kunci rahasia tidak pernah ditampilkan kembali setelah disimpan.</p>
 
+@if($tripayCheck = session('tripay_check'))
+    <div class="alert {{ $tripayCheck['ok'] ? ((int) ($tripayCheck['count'] ?? 0) > 0 ? 'alert-success' : 'alert-warning') : 'alert-danger' }}" role="status">
+        {{ $tripayCheck['message'] }}
+    </div>
+@endif
+<section class="card card-body mb-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+            <h2 class="h5 mb-1">Tes koneksi Tripay</h2>
+            <p class="text-muted small mb-0">Simpan pengaturan di bawah terlebih dahulu. Tes ini membaca kanal pembayaran aktif dan tidak membuat transaksi.</p>
+        </div>
+        <form method="POST" action="{{ route('payment-settings.check-tripay') }}">
+            @csrf
+            <button class="btn btn-outline-info" type="submit">Cek koneksi Tripay</button>
+        </form>
+    </div>
+</section>
+
 <form method="POST" action="{{ route('payment-settings.update') }}" enctype="multipart/form-data">
     @csrf
     @method('PUT')

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Invoice;
+use App\Jobs\ActivatePaidCustomer;
+use Illuminate\Support\Facades\Log;
 use App\Services\{BillingNotificationService, BillingService, TripayService};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -53,6 +55,29 @@ class InvoiceController
         }
     }
 
+    public function retryActivation(Invoice $invoice)
+    {
+        if ($invoice->status !== 'paid') {
+            return back()->with('error', 'Proses lanjutan hanya dapat diulang untuk invoice yang sudah lunas.');
+        }
+
+        try {
+            ActivatePaidCustomer::dispatch($invoice->id);
+        } catch (\Throwable $exception) {
+            Log::warning('Paid invoice activation retry could not be queued', [
+                'invoice_id' => $invoice->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return back()->with('error', 'Proses lanjutan belum masuk antrean. Periksa status worker/queue lalu coba lagi.');
+        }
+
+        Audit::log('payment.activation_retry_queued', Invoice::class, $invoice->id, [
+            'invoice_number' => $invoice->invoice_number,
+        ]);
+
+        return back()->with('success', 'Proses lanjutan pembayaran masuk antrean ulang. Pemulihan layanan tetap mengikuti aturan status dan tunggakan billing.');
+    }
     public function show(Invoice $invoice, TripayService $tripay)
     {
         $invoice->load(['customer.package', 'payments', 'items']);
@@ -63,16 +88,55 @@ class InvoiceController
         return view('invoices.show', compact('invoice', 'paymentChannels', 'activePayment'));
     }
 
+    public function cancel(Invoice $invoice)
+    {
+        $result = DB::transaction(function () use ($invoice): string {
+            $lockedInvoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
+
+            if (!in_array($lockedInvoice->status, ['draft', 'unpaid'], true)) {
+                return 'status';
+            }
+
+            // A pending or completed payment attempt may still settle at the gateway.
+            // Do not cancel an invoice once any payment record exists.
+            if ($lockedInvoice->payments()->exists() || filled($lockedInvoice->payment_reference) || filled($lockedInvoice->payment_url)) {
+                return 'payments';
+            }
+
+            $lockedInvoice->update([
+                'status' => 'cancelled',
+                'payment_url' => null,
+                'payment_reference' => null,
+                'payment_expired_at' => now(),
+            ]);
+
+            return 'cancelled';
+        });
+
+        if ($result === 'status') {
+            return back()->with('error', 'Hanya invoice draft atau belum lunas yang dapat dibatalkan.');
+        }
+        if ($result === 'payments') {
+            return back()->with('error', 'Invoice memiliki riwayat percobaan pembayaran. Selesaikan atau periksa transaksi terlebih dahulu; invoice tidak dibatalkan otomatis.');
+        }
+
+        Audit::log('invoice.cancelled', Invoice::class, $invoice->id, [
+            'invoice_number' => $invoice->invoice_number,
+        ]);
+
+        return back()->with('success', 'Invoice dibatalkan. Riwayat dan data pelanggan tetap tersimpan.');
+    }
+
     public function adjust(Request $request, Invoice $invoice)
     {
         $amounts = $request->validate(['discount' => 'required|integer|min:0', 'penalty' => 'required|integer|min:0']);
         if ($invoice->status !== 'unpaid') return back()->with('error', 'Hanya invoice belum lunas yang dapat disesuaikan.');
-        if ($invoice->payments()->where('provider', 'tripay')->exists()) return back()->with('error', 'Invoice sudah memiliki transaksi Tripay. Buat penyesuaian sebelum membuat checkout baru.');
+        if ($invoice->payments()->where('provider', 'tripay')->exists() || filled($invoice->payment_reference) || filled($invoice->payment_url)) return back()->with('error', 'Invoice sudah memiliki percobaan checkout atau transaksi Tripay. Periksa transaksi terlebih dahulu sebelum mengubah nominal.');
         if ($amounts['discount'] > $invoice->subtotal) return back()->with('error', 'Diskon tidak boleh melebihi subtotal.');
 
         $updated = DB::transaction(function () use ($invoice, $amounts): bool {
             $lockedInvoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
-            if ($lockedInvoice->status !== 'unpaid' || $amounts['discount'] > $lockedInvoice->subtotal || $lockedInvoice->payments()->where('provider', 'tripay')->exists()) return false;
+            if ($lockedInvoice->status !== 'unpaid' || $amounts['discount'] > $lockedInvoice->subtotal || $lockedInvoice->payments()->where('provider', 'tripay')->exists() || filled($lockedInvoice->payment_reference) || filled($lockedInvoice->payment_url)) return false;
             $lockedInvoice->update($amounts + ['total' => $lockedInvoice->subtotal - $amounts['discount'] + $lockedInvoice->tax_amount + $amounts['penalty']]);
             return true;
         });

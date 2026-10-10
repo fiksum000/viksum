@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Models\HotspotProfile;
 use App\Models\Package;
 use App\Models\Router;
 use App\Support\Audit;
@@ -36,6 +37,7 @@ class CustomerImportExportController
         'pppoe_username' => ['pppoe_username', 'username_pppoe', 'username', 'user', 'secret'],
         'pppoe_password' => ['pppoe_password', 'password_pppoe', 'password', 'pass'],
         'hotspot_username' => ['hotspot_username', 'username_hotspot'],
+        'hotspot_profile' => ['hotspot_profile', 'profile_hotspot', 'hotspot_package'],
         'hotspot_password' => ['hotspot_password', 'password_hotspot'],
         'pppoe_profile_normal' => ['pppoe_profile_normal', 'profile', 'profile_pppoe'],
         'pppoe_profile_isolir' => ['pppoe_profile_isolir', 'profile_isolir'],
@@ -48,6 +50,8 @@ class CustomerImportExportController
         'onu_id' => ['onu_id'], 'onu_sn' => ['onu_sn', 'serial_number'],
         'latitude' => ['latitude', 'lat'], 'longitude' => ['longitude', 'lon', 'lng'],
         'fup_enabled' => ['fup_enabled', 'fup'], 'fup_limit_bytes' => ['fup_limit_bytes', 'batas_fup_bytes'],
+        'fup_mode' => ['fup_mode', 'fup_policy', 'kebijakan_fup'],
+        'is_auto_isolate' => ['is_auto_isolate', 'auto_isolate', 'isolir_otomatis', 'isolasi_otomatis'],
         'notes' => ['notes', 'catatan'],
     ];
 
@@ -102,8 +106,32 @@ class CustomerImportExportController
                     continue;
                 }
 
-                $package = !empty($data['package']) ? Package::where('name', $data['package'])->first() : null;
                 $router = !empty($data['router']) ? Router::where('name', $data['router'])->first() : null;
+
+                $package = null;
+                if (!empty($data['package'])) {
+                    $packageQuery = Package::query()->where('name', $data['package']);
+                    if ($router) {
+                        $package = $packageQuery->where('router_id', $router->id)->first();
+                    } else {
+                        // Without a router name, only resolve an unambiguous package label.
+                        $matches = $packageQuery->limit(2)->get();
+                        $package = $matches->count() === 1 ? $matches->first() : null;
+                    }
+                }
+
+                $hotspotProfile = null;
+                $hotspotProfileName = trim((string) ($data['hotspot_profile'] ?? ''));
+                if ($service === 'hotspot' && $hotspotProfileName === '') {
+                    // Legacy Mikhmon exports often label the Hotspot profile simply "profile".
+                    $hotspotProfileName = trim((string) ($data['pppoe_profile_normal'] ?? ''));
+                }
+                if ($service === 'hotspot' && $router && $hotspotProfileName !== '') {
+                    $hotspotProfile = HotspotProfile::query()
+                        ->where('router_id', $router->id)
+                        ->where('name', $hotspotProfileName)
+                        ->first();
+                }
                 $status = strtolower((string) ($data['status'] ?? 'active'));
                 if (!in_array($status, ['active', 'isolated', 'suspended', 'terminated', 'trial'], true)) $status = 'active';
 
@@ -129,6 +157,12 @@ class CustomerImportExportController
                     'router_id' => $router?->id,
                     'pppoe_username' => $service === 'pppoe' ? $username : null,
                     'hotspot_username' => $service === 'hotspot' ? $username : null,
+                    // The legacy column is NOT NULL for all customer records.
+                    // Keep imported users compatible even when no managed profile was selected.
+                    'hotspot_profile' => $service === 'hotspot'
+                        ? ($hotspotProfile?->name ?: ($hotspotProfileName !== '' ? $hotspotProfileName : 'default'))
+                        : 'default',
+                    'hotspot_profile_id' => $service === 'hotspot' ? $hotspotProfile?->id : null,
                     'pppoe_profile_normal' => $service === 'pppoe' ? ($data['pppoe_profile_normal'] ?? $package?->normal_profile) : null,
                     'pppoe_profile_isolir' => $data['pppoe_profile_isolir'] ?? 'ISOLIR',
                     'pppoe_ip' => $data['pppoe_ip'] ?? null,
@@ -142,10 +176,19 @@ class CustomerImportExportController
                     'latitude' => is_numeric($data['latitude'] ?? null) ? $data['latitude'] : null,
                     'longitude' => is_numeric($data['longitude'] ?? null) ? $data['longitude'] : null,
                     'notes' => $data['notes'] ?? null,
-                    'is_auto_isolate' => true,
+                    'is_auto_isolate' => array_key_exists('is_auto_isolate', $data)
+                        ? filter_var($data['is_auto_isolate'], FILTER_VALIDATE_BOOLEAN)
+                        : true,
                 ];
                 if (array_key_exists('fup_enabled', $data)) {
                     $attributes['fup_enabled'] = filter_var($data['fup_enabled'], FILTER_VALIDATE_BOOLEAN);
+                }
+                $fupMode = strtolower(trim((string) ($data['fup_mode'] ?? '')));
+                if (in_array($fupMode, ['inherit', 'on', 'off'], true)) {
+                    $attributes['fup_override'] = $fupMode === 'inherit' ? null : $fupMode === 'on';
+                    if ($fupMode !== 'inherit') {
+                        $attributes['fup_enabled'] = $fupMode === 'on';
+                    }
                 }
                 if (is_numeric($data['fup_limit_bytes'] ?? null)) {
                     $attributes['fup_limit_bytes'] = (int) $data['fup_limit_bytes'];
@@ -176,7 +219,7 @@ class CustomerImportExportController
             'service_type' => ['nullable', 'in:pppoe,hotspot'],
             'package_id' => ['nullable', 'integer', 'exists:packages,id'],
         ]);
-        $headers = ['customer_code', 'name', 'whatsapp_number', 'phone', 'email', 'area', 'address', 'rt', 'rw', 'village', 'district', 'city', 'service_type', 'status', 'due_day', 'grace_days', 'package', 'router', 'pppoe_username', 'pppoe_profile_normal', 'pppoe_profile_isolir', 'pppoe_ip', 'pppoe_mac', 'hotspot_username', 'activated_at', 'registered_at', 'modem_device', 'source_port', 'olt_name', 'pon_port', 'onu_id', 'onu_sn', 'latitude', 'longitude', 'fup_enabled', 'fup_limit_bytes', 'notes'];
+        $headers = ['customer_code', 'name', 'whatsapp_number', 'phone', 'email', 'area', 'address', 'rt', 'rw', 'village', 'district', 'city', 'service_type', 'status', 'due_day', 'grace_days', 'package', 'router', 'pppoe_username', 'pppoe_profile_normal', 'pppoe_profile_isolir', 'pppoe_ip', 'pppoe_mac', 'hotspot_username', 'activated_at', 'registered_at', 'modem_device', 'source_port', 'olt_name', 'pon_port', 'onu_id', 'onu_sn', 'latitude', 'longitude', 'fup_enabled', 'fup_limit_bytes', 'notes', 'hotspot_profile', 'fup_mode', 'is_auto_isolate'];
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setTitle('Pelanggan');
@@ -187,9 +230,12 @@ class CustomerImportExportController
         $sheet->setAutoFilter('A1:'.Coordinate::stringFromColumnIndex(count($headers)).'1');
 
         $line = 2;
-        $customerQuery->filtered($filters)->reorder('id')->chunkById(500, function ($customers) use ($sheet, &$line): void {
+        $customerQuery->filtered($filters)->with('hotspotProfile')->reorder('id')->chunkById(500, function ($customers) use ($sheet, &$line): void {
             foreach ($customers as $customer) {
-                $values = [$customer->customer_code, $customer->name, $customer->whatsapp_number, $customer->phone, $customer->email, $customer->area, $customer->address, $customer->rt, $customer->rw, $customer->village, $customer->district, $customer->city, $customer->service_type, $customer->status, $customer->due_day, $customer->grace_days, $customer->package?->name, $customer->router?->name, $customer->pppoe_username, $customer->pppoe_profile_normal, $customer->pppoe_profile_isolir, $customer->pppoe_ip, $customer->pppoe_mac, $customer->hotspot_username, $customer->activated_at?->format('Y-m-d'), $customer->registered_at?->format('Y-m-d'), $customer->modem_device, $customer->source_port, $customer->olt_name, $customer->pon_port, $customer->onu_id, $customer->onu_sn, $customer->latitude, $customer->longitude, $customer->fup_enabled ? 'yes' : 'no', $customer->fup_limit_bytes, $customer->notes];
+                $fupMode = $customer->fup_override === null
+                    ? 'inherit'
+                    : ($customer->fup_override ? 'on' : 'off');
+                $values = [$customer->customer_code, $customer->name, $customer->whatsapp_number, $customer->phone, $customer->email, $customer->area, $customer->address, $customer->rt, $customer->rw, $customer->village, $customer->district, $customer->city, $customer->service_type, $customer->status, $customer->due_day, $customer->grace_days, $customer->package?->name, $customer->router?->name, $customer->pppoe_username, $customer->pppoe_profile_normal, $customer->pppoe_profile_isolir, $customer->pppoe_ip, $customer->pppoe_mac, $customer->hotspot_username, $customer->activated_at?->format('Y-m-d'), $customer->registered_at?->format('Y-m-d'), $customer->modem_device, $customer->source_port, $customer->olt_name, $customer->pon_port, $customer->onu_id, $customer->onu_sn, $customer->latitude, $customer->longitude, $customer->fup_enabled ? 'yes' : 'no', $customer->fup_limit_bytes, $customer->notes, $customer->hotspot_profile ?: $customer->hotspotProfile?->name, $fupMode, $customer->is_auto_isolate ? 'yes' : 'no'];
                 foreach ($values as $index => $value) {
                     $coordinate = Coordinate::stringFromColumnIndex($index + 1).$line;
                     $sheet->setCellValueExplicit($coordinate, (string) ($value ?? ''), DataType::TYPE_STRING);
