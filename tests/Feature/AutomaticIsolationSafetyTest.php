@@ -49,7 +49,7 @@ class AutomaticIsolationSafetyTest extends TestCase
             ->once()
             ->withArgs(fn ($customerId, $target, $message, $event, $variables) =>
                 $customerId === $overdue->id
-                && $target === '6281234567890'
+                && $target === '6280000000001'
                 && $event === 'isolation'
                 && str_contains($message, 'diisolir sementara'));
         $this->app->instance(IsolationService::class, $isolation);
@@ -103,7 +103,7 @@ class AutomaticIsolationSafetyTest extends TestCase
         return Customer::query()->create([
             'customer_code' => $code,
             'name' => $code,
-            'whatsapp_number' => '6281234567890',
+            'whatsapp_number' => '628'.str_pad((string) (Customer::query()->count() + 1), 10, '0', STR_PAD_LEFT),
             'service_type' => 'pppoe',
             'status' => 'active',
             'due_day' => 20,
