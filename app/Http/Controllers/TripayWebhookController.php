@@ -83,7 +83,7 @@ class TripayWebhookController
                 }
 
                 if ($invoice->status === 'cancelled') {
-                    throw new \\RuntimeException('Invoice has been cancelled; callback requires manual reconciliation');
+                    throw new \RuntimeException('Invoice has been cancelled; callback requires manual reconciliation');
                 }
 
                 $amount = (int) ($data['total_amount'] ?? 0);
