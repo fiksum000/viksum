@@ -135,6 +135,7 @@ class RouterOsService {
     string $profile,
     string $comment = '',
     ?string $previousUsername = null,
+    bool $enabled = true,
   ): void {
     $client = $this->client($router);
     $profiles = $client->query('/ip/hotspot/user/profile/print')->read();
@@ -156,7 +157,8 @@ class RouterOsService {
     $query->equal('name', $username)
       ->equal('password', $password)
       ->equal('profile', $profile)
-      ->equal('comment', $comment);
+      ->equal('comment', $comment)
+      ->equal('disabled', $enabled ? 'no' : 'yes');
 
     if ($previous) {
       $query->equal('.id', $previous['.id']);
