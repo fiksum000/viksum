@@ -287,6 +287,14 @@ class CustomerController extends Controller
             throw new RuntimeException('Username dan password Hotspot harus tersedia.');
         }
 
+        // Treat billing as the source of truth: push current profile settings before assigning users.
+        $routerOs->syncHotspotProfile($profile->fresh('router'));
+        $profile->update([
+            'sync_status' => 'synced',
+            'sync_error' => null,
+            'last_synced_at' => now(),
+        ]);
+
         $active = $customer->status === 'active';
         $routerOs->createOrUpdateHotspotUser(
             $customer->router,
