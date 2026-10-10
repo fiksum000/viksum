@@ -55,7 +55,7 @@
             <div class="col-md-4 pppoe-field"><label class="form-label" for="pppoe_password">Password PPP <span class="text-danger">{{ $creating ? '*' : '' }}</span></label><input id="pppoe_password" name="pppoe_password" type="password" class="form-control" autocomplete="new-password" placeholder="{{ $creating ? '' : 'Kosongkan jika tidak diubah' }}"></div>
             <div class="col-md-4 hotspot-field"><label class="form-label" for="hotspot_username">Username Hotspot <span class="text-danger">*</span></label><input id="hotspot_username" name="hotspot_username" class="form-control" value="{{ old('hotspot_username', $customer->hotspot_username) }}" maxlength="120"></div>
             <div class="col-md-4 hotspot-field"><label class="form-label" for="hotspot_password">Password Hotspot <span class="text-danger">{{ $creating ? '*' : '' }}</span></label><input id="hotspot_password" name="hotspot_password" type="password" class="form-control" autocomplete="new-password" placeholder="{{ $creating ? '' : 'Kosongkan jika tidak diubah' }}"></div>
-            <div class="col-md-4 hotspot-field"><label class="form-label" for="hotspot_profile">Profil Hotspot</label><input id="hotspot_profile" name="hotspot_profile" class="form-control" maxlength="120" value="{{ old('hotspot_profile', $customer->hotspot_profile ?: 'default') }}"><div class="form-text">Nama profil harus cocok dengan profil yang tersedia pada router MikroTik terpilih; billing akan memvalidasinya sebelum sinkronisasi.</div></div>
+            <div class="col-md-4 hotspot-field"><label class="form-label" for="hotspot_profile_id">Paket / profil Hotspot <span class="text-danger">*</span></label><select id="hotspot_profile_id" name="hotspot_profile_id" class="form-select"><option value="">Pilih profil yang dibuat di menu Hotspot</option>@foreach($hotspotProfiles as $hp)<option value="{{ $hp->id }}" data-router-id="{{ $hp->router_id }}" @selected((string)old('hotspot_profile_id', $customer->hotspot_profile_id) === (string)$hp->id)>{{ $hp->name }} — {{ $hp->download_speed }} down / {{ $hp->upload_speed }} up · {{ $hp->router?->name }}{{ $hp->enabled ? '' : ' (nonaktif)' }}</option>@endforeach</select><div class="form-text">Profil dibuat dan dikelola di menu Hotspot. Pilih paket yang terhubung ke router pelanggan.</div></div>
             <div class="col-md-4"><label class="form-label" for="pppoe_ip">IP statis PPP</label><input id="pppoe_ip" name="pppoe_ip" class="form-control" value="{{ old('pppoe_ip', $customer->pppoe_ip) }}" placeholder="Opsional"></div>
             <div class="col-md-4"><label class="form-label" for="pppoe_mac">MAC address terkunci</label><input id="pppoe_mac" name="pppoe_mac" class="form-control" value="{{ old('pppoe_mac', $customer->pppoe_mac) }}" placeholder="AA:BB:CC:DD:EE:FF"></div>
             <div class="col-md-4"><label class="form-label" for="pppoe_profile_display">Profil PPP dari paket</label><input id="pppoe_profile_display" class="form-control" value="{{ old('pppoe_profile_normal', $customer->package?->normal_profile ?: $customer->pppoe_profile_normal) }}" readonly><input type="hidden" id="pppoe_profile_normal" name="pppoe_profile_normal" value="{{ old('pppoe_profile_normal', $customer->package?->normal_profile ?: $customer->pppoe_profile_normal) }}"><div class="form-text">Profil ini mengikuti paket; ubah pemetaannya di menu Paket &amp; Profil PPP.</div></div>
@@ -190,17 +190,33 @@
     const service = document.getElementById('service_type');
     const creating = document.querySelector('form[data-creating]').dataset.creating === '1';
     const routerSelect = document.getElementById('router_id');
+    const serviceStatus = document.getElementById('status');
+    const hotspotProfileSelect = document.getElementById('hotspot_profile_id');
+    const filterHotspotProfilesByRouter = () => {
+        const routerId = routerSelect.value;
+        [...hotspotProfileSelect.options].forEach((option) => {
+            if (!option.value) return;
+            option.hidden = Boolean(routerId && option.dataset.routerId !== routerId);
+        });
+        const selected = hotspotProfileSelect.options[hotspotProfileSelect.selectedIndex];
+        if (selected?.hidden) hotspotProfileSelect.value = '';
+    };
     const setServiceFields = () => {
         const isPppoe = service.value === 'pppoe';
+        const requiresProvisioning = serviceStatus.value !== 'trial';
         document.querySelectorAll('.pppoe-field').forEach((el) => el.classList.toggle('d-none', !isPppoe));
         document.querySelectorAll('.hotspot-field').forEach((el) => el.classList.toggle('d-none', isPppoe));
-        document.getElementById('pppoe_username').required = isPppoe;
-        routerSelect.required = isPppoe;
-        document.getElementById('hotspot_username').required = !isPppoe;
-        document.getElementById('pppoe_password').required = creating && isPppoe;
-        document.getElementById('hotspot_password').required = creating && !isPppoe;
+        document.getElementById('pppoe_username').required = isPppoe && requiresProvisioning;
+        routerSelect.required = requiresProvisioning;
+        document.getElementById('hotspot_username').required = !isPppoe && requiresProvisioning;
+        document.getElementById('pppoe_password').required = creating && isPppoe && requiresProvisioning;
+        document.getElementById('hotspot_password').required = creating && !isPppoe && requiresProvisioning;
+        hotspotProfileSelect.required = !isPppoe && requiresProvisioning;
+        filterHotspotProfilesByRouter();
     };
     service.addEventListener('change', setServiceFields);
+    serviceStatus.addEventListener('change', setServiceFields);
+    routerSelect.addEventListener('change', filterHotspotProfilesByRouter);
     setServiceFields();
 
     const packageSelect = document.getElementById('package_id');
