@@ -97,6 +97,7 @@ Route::middleware('auth.session')->group(function (): void {
         Route::post('/hotspot/profiles/{hotspotProfile}/sync', [HotspotController::class, 'profileSync'])->name('hotspot.profiles.sync');
         Route::delete('/hotspot/profiles/{hotspotProfile}', [HotspotController::class, 'profileDestroy'])->name('hotspot.profiles.destroy');
         Route::post('/hotspot/vouchers/{voucher}/sync', [HotspotController::class, 'syncVoucher'])->name('hotspot.vouchers.sync');
+        Route::post('/hotspot/vouchers/{voucher}/renew', [HotspotController::class, 'renew'])->name('hotspot.vouchers.renew');
         Route::post('/hotspot/vouchers', [HotspotController::class, 'generate'])->name('hotspot.generate');
         Route::patch('/hotspot/vouchers/{voucher}', [HotspotController::class, 'toggle'])->name('hotspot.toggle');
         Route::delete('/hotspot/vouchers/{voucher}', [HotspotController::class, 'destroy'])->name('hotspot.destroy');
