@@ -49,7 +49,7 @@ class CustomerManualIsolationActionsTest extends TestCase
 
         $isolation = Mockery::mock(IsolationService::class);
         $isolation->shouldReceive('isolate')->once()
-            ->andThrow(new \\RuntimeException('sensitive-router-host-and-api-details'));
+            ->andThrow(new \RuntimeException('sensitive-router-host-and-api-details'));
         $this->app->instance(IsolationService::class, $isolation);
 
         $this->withSession(['user_id' => $admin->id])
