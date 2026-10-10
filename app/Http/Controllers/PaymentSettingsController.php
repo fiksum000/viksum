@@ -8,6 +8,7 @@ use App\Services\TripayService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class PaymentSettingsController
@@ -39,7 +40,7 @@ class PaymentSettingsController
                     : 'Koneksi berhasil, tetapi belum ada kanal pembayaran aktif.',
             ]);
         } catch (\Throwable $exception) {
-            report($exception);
+            Log::warning('Tripay connection check failed', ['error' => $exception->getMessage()]);
             return back()->with('tripay_check', [
                 'ok' => false,
                 'count' => null,
