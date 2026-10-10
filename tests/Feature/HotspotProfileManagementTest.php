@@ -14,6 +14,21 @@ class HotspotProfileManagementTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_admin_can_render_the_hotspot_management_dashboard_in_the_browser(): void
+    {
+        $this->router();
+        $admin = $this->loginAdmin();
+
+        $this->withSession(['user_id' => $admin->id])
+            ->get(route('hotspot.index'))
+            ->assertOk()
+            ->assertSee('Hotspot Center')
+            ->assertSee('Buat profil Hotspot')
+            ->assertSee('Profil yang dikelola billing')
+            ->assertSee('Buat voucher')
+            ->assertSee('Daftar voucher');
+    }
+
     public function test_admin_can_create_a_billing_owned_profile_and_sync_it_to_routeros(): void
     {
         $router = $this->router();
