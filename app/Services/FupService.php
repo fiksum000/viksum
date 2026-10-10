@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\FupState;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use Throwable;
 
 class FupService
 {
@@ -29,8 +30,10 @@ class FupService
     {
         $count = 0;
         $period = $this->currentPeriod();
-        $activeMaps = [];
 
+        // Recover a previous month's limited sessions as soon as the collection worker
+        // runs after rollover, rather than depending only on the separate reset schedule.
+        $this->restoreExpiredPeriodLimits($period);
         $this->restoreDisabledCustomers($period);
 
         Customer::with(['router', 'package'])
@@ -42,82 +45,187 @@ class FupService
                 $query->where('fup_override', true)
                     ->orWhere(function ($inherit): void {
                         $inherit->whereNull('fup_override')
-                            ->where(function ($enabled): void {
-                                $enabled->where('fup_enabled', true)
-                                    ->orWhereHas('package', fn ($package) => $package->where('fup_enabled', true));
-                            });
+                            ->whereHas('package', fn ($package) => $package->where('fup_enabled', true));
                     });
             })
-            ->chunkById(50, function ($customers) use ($period, &$count, &$activeMaps): void {
+            ->chunkById(50, function ($customers) use ($period, &$count): void {
                 $byRouter = [];
                 foreach ($customers as $customer) {
                     $byRouter[$customer->router_id]['router'] = $customer->router;
                     $byRouter[$customer->router_id]['customers'][] = $customer;
                 }
 
-                foreach ($byRouter as $routerId => $bundle) {
-                    try {
-                        if (!array_key_exists($routerId, $activeMaps)) {
-                            $activeMaps[$routerId] = $this->routerOs->activePppMap($bundle['router']);
-                        }
+                foreach ($byRouter as $bundle) {
+                    $router = $bundle['router'];
+                    if (!$router || !$router->enabled) {
+                        continue;
+                    }
 
-                        foreach ($bundle['customers'] as $customer) {
-                            $row = $activeMaps[$routerId][$customer->pppoe_username] ?? null;
+                    try {
+                        $activeMap = $this->routerOs->activePppMap($router);
+                    } catch (Throwable $exception) {
+                        report($exception);
+                        continue;
+                    }
+
+                    foreach ($bundle['customers'] as $customer) {
+                        try {
+                            $row = $activeMap[$customer->pppoe_username] ?? null;
                             if (!$row) {
                                 continue;
                             }
 
-                            $rx = (int) ($row['bytes-in'] ?? 0);
-                            $tx = (int) ($row['bytes-out'] ?? 0);
-                            $limit = (int) ($customer->fup_limit_bytes ?: $customer->package?->fup_limit_bytes ?: 0);
-                            $state = FupState::firstOrCreate(['customer_id' => $customer->id, 'period' => $period]);
-                            $delta = 0;
-                            if ($state->last_sampled_at) {
-                                $delta = ($rx >= $state->last_rx ? $rx - $state->last_rx : $rx)
-                                    + ($tx >= $state->last_tx ? $tx - $state->last_tx : $tx);
+                            $rx = max(0, (int) ($row['bytes-in'] ?? 0));
+                            $tx = max(0, (int) ($row['bytes-out'] ?? 0));
+                            $sessionId = filled($row['.id'] ?? null) ? (string) $row['.id'] : null;
+                            $state = FupState::firstOrCreate([
+                                'customer_id' => $customer->id,
+                                'period' => $period,
+                            ]);
+
+                            $sessionChanged = $sessionId !== null
+                                && filled($state->last_session_id)
+                                && $state->last_session_id !== $sessionId;
+
+                            // PPP counters reset when a session is recreated. When the API
+                            // returns a different active-session ID, count the new session's
+                            // current counters, even if they happen to exceed the previous ones.
+                            // First observation establishes a baseline to avoid counting traffic
+                            // from before this package/customer's FUP tracking began.
+                            if (!$state->last_sampled_at) {
+                                $delta = 0;
+                            } elseif ($sessionChanged) {
+                                $delta = $rx + $tx;
+                            } else {
+                                $delta = ($rx >= (int) $state->last_rx ? $rx - (int) $state->last_rx : $rx)
+                                    + ($tx >= (int) $state->last_tx ? $tx - (int) $state->last_tx : $tx);
                             }
 
-                            $newTotal = $state->total_bytes + $delta;
-                            $state->update(['last_rx' => $rx, 'last_tx' => $tx, 'total_bytes' => $newTotal, 'last_sampled_at' => now()]);
+                            $newTotal = (int) $state->total_bytes + $delta;
+                            $state->update([
+                                'last_rx' => $rx,
+                                'last_tx' => $tx,
+                                'total_bytes' => $newTotal,
+                                'last_sampled_at' => now(),
+                                'last_session_id' => $sessionId,
+                            ]);
+
                             DB::table('fup_samples')->insert([
-                                'customer_id' => $customer->id, 'period' => $period, 'rx_bytes' => $rx, 'tx_bytes' => $tx,
-                                'delta_bytes' => $delta, 'total_bytes_after' => $newTotal, 'sampled_at' => now(),
-                                'created_at' => now(), 'updated_at' => now(),
+                                'customer_id' => $customer->id,
+                                'period' => $period,
+                                'rx_bytes' => $rx,
+                                'tx_bytes' => $tx,
+                                'delta_bytes' => $delta,
+                                'total_bytes_after' => $newTotal,
+                                'sampled_at' => now(),
+                                'created_at' => now(),
+                                'updated_at' => now(),
                             ]);
                             $count++;
 
-                            $limitedProfile = $customer->fup_speed_after ?: $customer->package?->fup_speed_after;
-                            if ($state->limited && ($limit <= 0 || $newTotal < $limit)) {
+                            $fupEnabled = $this->isFupEnabled($customer);
+                            $limit = $this->effectiveLimit($customer);
+                            $limitedProfile = $this->limitedProfile($customer);
+
+                            if ($state->limited
+                                && (!$fupEnabled || $limit <= 0 || blank($limitedProfile) || $newTotal < $limit)) {
                                 $this->restoreNormalProfile($customer);
                                 $state->update(['limited' => false]);
-                                DB::table('fup_logs')->insert([
-                                    'customer_id' => $customer->id, 'period' => $period, 'action' => 'unlimited', 'total_bytes' => $newTotal,
-                                    'profile_before' => $limitedProfile,
-                                    'profile_after' => $customer->pppoe_profile_normal ?: $customer->package?->normal_profile,
-                                    'details' => 'Batas FUP berubah/dinonaktifkan; penggunaan masih di bawah batas baru',
-                                    'created_at' => now(), 'updated_at' => now(),
-                                ]);
+                                $this->logFup(
+                                    $customer,
+                                    $period,
+                                    'unlimited',
+                                    $newTotal,
+                                    $limitedProfile,
+                                    $customer->pppoe_profile_normal ?: $customer->package?->normal_profile,
+                                    'FUP dinonaktifkan, batas berubah, atau penggunaan berada di bawah batas baru; profil normal dipulihkan',
+                                );
                             }
 
-                            if ($limit > 0 && $newTotal >= $limit && !$state->limited && $limitedProfile) {
+                            if ($fupEnabled && $limit > 0 && $newTotal >= $limit
+                                && !$state->limited && filled($limitedProfile)) {
                                 $normalProfile = $customer->pppoe_profile_normal ?: $customer->package?->normal_profile;
-                                $this->routerOs->setPppProfile($bundle['router'], $customer->pppoe_username, $limitedProfile);
-                                $this->routerOs->disconnectPppActive($bundle['router'], $customer->pppoe_username);
+                                $this->routerOs->setPppProfile($router, $customer->pppoe_username, $limitedProfile);
+                                $this->routerOs->disconnectPppActive($router, $customer->pppoe_username);
                                 $state->update(['limited' => true]);
-                                DB::table('fup_logs')->insert([
-                                    'customer_id' => $customer->id, 'period' => $period, 'action' => 'limited', 'total_bytes' => $newTotal,
-                                    'profile_before' => $normalProfile, 'profile_after' => $limitedProfile,
-                                    'details' => 'Batas FUP paket/pelanggan tercapai', 'created_at' => now(), 'updated_at' => now(),
-                                ]);
+                                $this->logFup(
+                                    $customer,
+                                    $period,
+                                    'limited',
+                                    $newTotal,
+                                    $normalProfile,
+                                    $limitedProfile,
+                                    'Batas FUP paket/pelanggan tercapai',
+                                );
                             }
+                        } catch (Throwable $exception) {
+                            // A problem with one secret must not stop FUP for the rest of the router.
+                            report($exception);
                         }
-                    } catch (\Throwable $e) {
-                        report($e);
                     }
                 }
             });
 
         return $count;
+    }
+
+    private function restoreExpiredPeriodLimits(string $period): void
+    {
+        FupState::with(['customer.router', 'customer.package'])
+            ->where('period', '!=', $period)
+            ->where('limited', true)
+            ->chunkById(100, function ($states): void {
+                foreach ($states as $state) {
+                    $customer = $state->customer;
+                    if (!$customer) {
+                        $state->update([
+                            'total_bytes' => 0,
+                            'last_rx' => 0,
+                            'last_tx' => 0,
+                            'limited' => false,
+                            'last_session_id' => null,
+                        ]);
+                        continue;
+                    }
+
+                    try {
+                        if ($customer->status === 'active') {
+                            $this->restoreNormalProfile($customer);
+                            $this->logFup(
+                                $customer,
+                                $state->period,
+                                'reset',
+                                (int) $state->total_bytes,
+                                $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
+                                $customer->pppoe_profile_normal ?: $customer->package?->normal_profile,
+                                'Periode FUP selesai; profil normal dipulihkan',
+                            );
+                        } else {
+                            // Do not replace an isolation profile with the normal profile.
+                            $this->logFup(
+                                $customer,
+                                $state->period,
+                                'reset',
+                                (int) $state->total_bytes,
+                                $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
+                                null,
+                                'Periode FUP selesai; akun tidak aktif sehingga profil router tidak disentuh',
+                            );
+                        }
+
+                        $state->update([
+                            'total_bytes' => 0,
+                            'last_rx' => 0,
+                            'last_tx' => 0,
+                            'limited' => false,
+                            'last_sampled_at' => null,
+                            'last_session_id' => null,
+                        ]);
+                    } catch (Throwable $exception) {
+                        report($exception);
+                    }
+                }
+            });
     }
 
     private function restoreDisabledCustomers(string $period): void
@@ -128,21 +236,44 @@ class FupService
             ->chunkById(100, function ($states): void {
                 foreach ($states as $state) {
                     $customer = $state->customer;
-                    if (!$customer || $this->isFupEnabled($customer)) {
+                    if (!$customer) {
+                        continue;
+                    }
+
+                    // A customer who is isolated/suspended must not be switched back
+                    // to normal PPP profile by the FUP worker.
+                    if ($customer->status !== 'active') {
+                        $this->logFup(
+                            $customer,
+                            $state->period,
+                            'restored',
+                            (int) $state->total_bytes,
+                            $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
+                            null,
+                            'Layanan tidak aktif; status FUP dibersihkan tanpa mengubah profil isolir/router',
+                        );
+                        $state->update(['limited' => false]);
+                        continue;
+                    }
+
+                    if ($this->isFupEnabled($customer)) {
                         continue;
                     }
 
                     try {
                         $this->restoreNormalProfile($customer);
                         $state->update(['limited' => false]);
-                        DB::table('fup_logs')->insert([
-                            'customer_id' => $customer->id, 'period' => $state->period, 'action' => 'restored',
-                            'total_bytes' => $state->total_bytes, 'profile_before' => $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
-                            'profile_after' => $customer->pppoe_profile_normal ?: $customer->package?->normal_profile,
-                            'details' => 'FUP dinonaktifkan; profil normal dipulihkan', 'created_at' => now(), 'updated_at' => now(),
-                        ]);
-                    } catch (\Throwable $e) {
-                        report($e);
+                        $this->logFup(
+                            $customer,
+                            $state->period,
+                            'restored',
+                            (int) $state->total_bytes,
+                            $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
+                            $customer->pppoe_profile_normal ?: $customer->package?->normal_profile,
+                            'FUP dinonaktifkan; profil normal dipulihkan',
+                        );
+                    } catch (Throwable $exception) {
+                        report($exception);
                     }
                 }
             });
@@ -154,7 +285,23 @@ class FupService
             return (bool) $customer->fup_override;
         }
 
-        return (bool) $customer->fup_enabled || (bool) $customer->package?->fup_enabled;
+        return (bool) $customer->package?->fup_enabled;
+    }
+
+    private function effectiveLimit(Customer $customer): int
+    {
+        return max(0, (int) ($customer->fup_limit_bytes ?: $customer->package?->fup_limit_bytes ?: 0));
+    }
+
+    private function limitedProfile(Customer $customer): ?string
+    {
+        if ($customer->fup_override === true && filled($customer->fup_speed_after)) {
+            return $customer->fup_speed_after;
+        }
+
+        return filled($customer->package?->fup_speed_after)
+            ? $customer->package->fup_speed_after
+            : null;
     }
 
     public function resetMonthly(): int
@@ -162,28 +309,48 @@ class FupService
         $period = $this->currentPeriod();
         $affected = 0;
 
-        FupState::with('customer.router', 'customer.package')->where('period', '!=', $period)
-            ->where(function ($query): void { $query->where('limited', true)->orWhere('total_bytes', '>', 0); })
+        FupState::with(['customer.router', 'customer.package'])
+            ->where('period', '!=', $period)
+            ->where(function ($query): void {
+                $query->where('limited', true)->orWhere('total_bytes', '>', 0);
+            })
             ->chunkById(100, function ($states) use (&$affected): void {
                 foreach ($states as $state) {
                     $customer = $state->customer;
+
                     if ($state->limited && $customer) {
                         try {
-                            $this->restoreNormalProfile($customer);
-                            DB::table('fup_logs')->insert([
-                                'customer_id' => $customer->id, 'period' => $state->period, 'action' => 'reset',
-                                'total_bytes' => $state->total_bytes,
-                                'profile_before' => $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
-                                'profile_after' => $customer->pppoe_profile_normal ?: $customer->package?->normal_profile,
-                                'details' => 'Kuota FUP direset bulanan; profil normal dipulihkan',
-                                'created_at' => now(), 'updated_at' => now(),
-                            ]);
-                        } catch (\Throwable $e) {
-                            report($e);
+                            if ($customer->status === 'active') {
+                                $this->restoreNormalProfile($customer);
+                            }
+
+                            $this->logFup(
+                                $customer,
+                                $state->period,
+                                'reset',
+                                (int) $state->total_bytes,
+                                $customer->fup_speed_after ?: $customer->package?->fup_speed_after,
+                                $customer->status === 'active'
+                                    ? ($customer->pppoe_profile_normal ?: $customer->package?->normal_profile)
+                                    : null,
+                                $customer->status === 'active'
+                                    ? 'Kuota FUP direset; profil normal dipulihkan'
+                                    : 'Kuota FUP direset; profil router tidak disentuh karena layanan tidak aktif',
+                            );
+                        } catch (Throwable $exception) {
+                            report($exception);
                             continue;
                         }
                     }
-                    $state->update(['total_bytes' => 0, 'last_rx' => 0, 'last_tx' => 0, 'limited' => false]);
+
+                    $state->update([
+                        'total_bytes' => 0,
+                        'last_rx' => 0,
+                        'last_tx' => 0,
+                        'limited' => false,
+                        'last_sampled_at' => null,
+                        'last_session_id' => null,
+                    ]);
                     $affected++;
                 }
             });
@@ -193,6 +360,10 @@ class FupService
 
     private function restoreNormalProfile(Customer $customer): void
     {
+        if ($customer->status !== 'active') {
+            throw new RuntimeException('Profil normal tidak dipulihkan karena status layanan pelanggan bukan aktif.');
+        }
+
         $normalProfile = $customer->pppoe_profile_normal ?: $customer->package?->normal_profile;
         if (!$customer->router || !$customer->pppoe_username || !$normalProfile) {
             throw new RuntimeException('Router, username PPPoE, atau profil normal belum dikonfigurasi.');
@@ -201,5 +372,26 @@ class FupService
         $this->routerOs->setPppProfile($customer->router, $customer->pppoe_username, $normalProfile);
         $this->routerOs->disconnectPppActive($customer->router, $customer->pppoe_username);
     }
-}
 
+    private function logFup(
+        Customer $customer,
+        string $period,
+        string $action,
+        int $totalBytes,
+        ?string $profileBefore,
+        ?string $profileAfter,
+        string $details,
+    ): void {
+        DB::table('fup_logs')->insert([
+            'customer_id' => $customer->id,
+            'period' => $period,
+            'action' => $action,
+            'total_bytes' => $totalBytes,
+            'profile_before' => $profileBefore,
+            'profile_after' => $profileAfter,
+            'details' => $details,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+}
