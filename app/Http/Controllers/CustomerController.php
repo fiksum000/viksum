@@ -85,6 +85,7 @@ class CustomerController extends Controller
             'customer' => $customer,
             'packages' => Package::with('router')->orderBy('name')->get(),
             'routers' => Router::orderBy('name')->get(),
+            'hotspotProfiles' => HotspotProfile::query()->where('enabled', true)->orWhere('id', $customer->hotspot_profile_id)->orderBy('name')->get(),
             'onus' => Onu::with('olt')->where(function ($q) use ($customer) {
                 $q->whereNull('customer_id');
                 if ($customer->exists) {
@@ -262,33 +263,44 @@ class CustomerController extends Controller
             return;
         }
 
-        // A trial account should not remain usable on the router. New trial
-        // customers have no existing RouterOS account to modify.
+        if (! $customer->router_id || ! $customer->router) {
+            throw new RuntimeException('Pilih router MikroTik untuk layanan Hotspot.');
+        }
+
         if ($customer->status === 'trial') {
-            if (filled($previousUsername) && $customer->router) {
+            if (filled($previousUsername)) {
                 $routerOs->setHotspotUserEnabled($customer->router, $previousUsername, false);
                 $routerOs->disconnectHotspotActive($customer->router, $previousUsername);
             }
             return;
         }
 
-        if (! $customer->router_id || ! $customer->router) {
-            throw new RuntimeException('Pilih router MikroTik untuk layanan Hotspot.');
+        $profile = $customer->hotspotProfile;
+        if (! $profile || (int) $profile->router_id !== (int) $customer->router_id) {
+            throw new RuntimeException('Pilih profil Hotspot yang dikelola billing dan terhubung ke router pelanggan.');
+        }
+        if (! $profile->enabled) {
+            throw new RuntimeException('Profil Hotspot ini sudah dinonaktifkan. Pilih profil aktif sebelum menyimpan pelanggan.');
         }
 
         if (blank($customer->hotspot_username) || blank($customer->hotspot_password)) {
             throw new RuntimeException('Username dan password Hotspot harus tersedia.');
         }
 
+        $active = $customer->status === 'active';
         $routerOs->createOrUpdateHotspotUser(
             $customer->router,
             $customer->hotspot_username,
             $customer->hotspot_password,
-            $customer->hotspot_profile ?: 'default',
+            $profile->routerProfileName(),
             'Billing customer '.$customer->customer_code,
             $previousUsername,
-            $customer->status === 'active',
+            $active,
         );
+
+        if (! $active) {
+            $routerOs->disconnectHotspotActive($customer->router, $customer->hotspot_username);
+        }
     }
 
     private function syncOnu(Customer $customer, ?int $onuId): void
@@ -358,7 +370,7 @@ class CustomerController extends Controller
             'due_day' => 'required|integer|min:1|max:28',
             'grace_days' => 'nullable|integer|min:0|max:31',
             'activated_at' => 'nullable|date',
-            'router_id' => [$needsPppSetup || $needsHotspotSetup ? 'required' : 'nullable', 'exists:routers,id'],
+            'router_id' => [$needsPppSetup || $service === 'hotspot' ? 'required' : 'nullable', 'exists:routers,id'],
             'package_id' => ['required', 'exists:packages,id'],
             'pppoe_username' => [$needsPppSetup ? 'required' : 'nullable', 'max:120', Rule::unique('customers', 'pppoe_username')->ignore($customer?->id)],
             'pppoe_password' => [$needsPppPassword ? 'required' : 'nullable', 'string', 'max:255'],
@@ -368,7 +380,11 @@ class CustomerController extends Controller
             'pppoe_profile_isolir' => 'nullable|max:120',
             'hotspot_username' => [$service === 'hotspot' ? 'required' : 'nullable', 'max:120', Rule::unique('customers', 'hotspot_username')->ignore($customer?->id)],
             'hotspot_password' => [$service === 'hotspot' && $creating ? 'required' : 'nullable', 'string', 'max:255'],
-            'hotspot_profile' => [$service === 'hotspot' ? 'required' : 'nullable', 'string', 'max:120'],
+            'hotspot_profile_id' => [
+                $needsHotspotSetup ? 'required' : 'nullable',
+                'integer',
+                Rule::exists('hotspot_profiles', 'id')->where(fn ($query) => $query->where('router_id', (int) $r->input('router_id'))),
+            ],
             'olt_name' => 'nullable|max:120',
             'pon_port' => 'nullable|max:50',
             'onu_id' => 'nullable|max:50',
@@ -380,6 +396,30 @@ class CustomerController extends Controller
             'is_auto_isolate' => 'nullable|boolean',
             'portal_password' => ['nullable', 'string', 'size:8', 'regex:/^[A-Za-z0-9]{8}$/'],
         ]);
+
+        if ($service === 'hotspot') {
+            $managedProfile = filled($data['hotspot_profile_id'] ?? null)
+                ? HotspotProfile::query()->whereKey($data['hotspot_profile_id'])
+                    ->where('router_id', (int) ($data['router_id'] ?? 0))->first()
+                : null;
+
+            if ($needsHotspotSetup && ! $managedProfile) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'hotspot_profile_id' => 'Pilih profil Hotspot yang sudah dibuat dari menu Hotspot.',
+                ]);
+            }
+            if ($needsHotspotSetup && $managedProfile && ! $managedProfile->enabled) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'hotspot_profile_id' => 'Profil ini dinonaktifkan. Pilih profil Hotspot yang aktif.',
+                ]);
+            }
+
+            $data['hotspot_profile'] = $managedProfile?->name;
+            $data['hotspot_profile_id'] = $managedProfile?->id;
+        } else {
+            $data['hotspot_profile'] = null;
+            $data['hotspot_profile_id'] = null;
+        }
 
         $selectedPackage = Package::findOrFail($data['package_id']);
         if ($service === 'pppoe' && $status !== 'trial') {
