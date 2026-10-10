@@ -47,14 +47,17 @@ class CustomerPortalPasswordResetTest extends TestCase
         $this->assertTrue(Hash::check($password, $customer->portal_password));
         $this->assertFalse(Hash::check('Known-old-portal-password', $customer->portal_password));
 
-        $detail = $this->withSession(['user_id' => $admin->id])
-            ->get(route('customers.show', $customer))
+        $firstDetail = $this->get(route('customers.show', $customer))
             ->assertOk()
             ->assertSee('Password diatur')
             ->assertSee('Ulangi password portal')
+            ->assertSee($password);
+
+        $this->get(route('customers.show', $customer))
+            ->assertOk()
             ->assertDontSee($password);
 
-        $this->assertSame(200, $detail->getStatusCode());
+        $this->assertSame(200, $firstDetail->getStatusCode());
     }
 
     public function test_operator_cannot_reset_customer_portal_password(): void
