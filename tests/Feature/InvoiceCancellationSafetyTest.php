@@ -30,7 +30,7 @@ class InvoiceCancellationSafetyTest extends TestCase
         ]);
     }
 
-    public function test_invoice_with_trip ay_payment_attempt_cannot_be_cancelled(): void
+    public function test_invoice_with_tripay_payment_attempt_cannot_be_cancelled(): void
     {
         $invoice = $this->invoice('unpaid');
         Payment::query()->create([
