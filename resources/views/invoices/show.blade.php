@@ -69,12 +69,16 @@
     <section class="card mt-3">
         <div class="card-body">
             <h2 class="h5">Pembayaran Manual</h2>
+            @if ($invoice->payments->contains('provider', 'tripay') || filled($invoice->payment_reference) || filled($invoice->payment_url))
+                <div class="alert alert-warning mb-0">Invoice memiliki checkout atau riwayat Tripay. Periksa status transaksi gateway terlebih dahulu agar pembayaran manual tidak menyebabkan tagihan terbayar dua kali.</div>
+            @else
             <form method="POST" action="{{ route('invoices.manual-payment', $invoice) }}" class="row g-2">
                 @csrf
                 <div class="col-md-4"><label class="form-label" for="amount">Nominal</label><input id="amount" type="number" name="amount" class="form-control" value="{{ $invoice->total }}" min="1" required></div>
                 <div class="col-md-4"><label class="form-label" for="channel">Kanal pembayaran</label><input id="channel" name="channel" class="form-control" value="Cash" maxlength="50" required></div>
                 <div class="col-md-4 d-flex align-items-end"><button class="btn btn-warning w-100">Catat Lunas Manual</button></div>
             </form>
+            @endif
         </div>
     </section>
 
