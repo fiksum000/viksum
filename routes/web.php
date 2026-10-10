@@ -114,6 +114,7 @@ Route::middleware('auth.session')->group(function (): void {
         Route::post('/invoices/{invoice}/remind', [InvoiceController::class, 'remind'])->middleware('throttle:5,1')->name('invoices.remind');
         Route::put('/invoices/{invoice}/adjustments', [InvoiceController::class, 'adjust'])->name('invoices.adjust');
         Route::post('/invoices/{invoice}/manual-payment', [PaymentController::class, 'manual'])->name('invoices.manual-payment');
+        Route::post('/invoices/{invoice}/cancel', [InvoiceController::class, 'cancel'])->middleware('role:super_admin,admin')->name('invoices.cancel');
     });
 });
 
