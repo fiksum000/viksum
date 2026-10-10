@@ -150,6 +150,12 @@ class FupService
                             if ($state->limited
                                 && (!$fupEnabled || $limit <= 0 || blank($limitedProfile) || $newTotal < $limit)) {
                                 $this->restoreNormalProfile($customer);
+                                $this->rememberSecretProfile(
+                                    $secretMaps,
+                                    $routerId,
+                                    $customer->pppoe_username,
+                                    $customer->pppoe_profile_normal ?: $customer->package?->normal_profile ?: '',
+                                );
                                 $state->update(['limited' => false]);
                                 $this->logFup(
                                     $customer,
@@ -167,6 +173,7 @@ class FupService
                                 $normalProfile = $customer->pppoe_profile_normal ?: $customer->package?->normal_profile;
                                 $this->routerOs->setPppProfile($router, $customer->pppoe_username, $limitedProfile);
                                 $this->routerOs->disconnectPppActive($router, $customer->pppoe_username);
+                                $this->rememberSecretProfile($secretMaps, $routerId, $customer->pppoe_username, $limitedProfile);
                                 $state->update(['limited' => true]);
                                 $this->logFup(
                                     $customer,
@@ -187,6 +194,7 @@ class FupService
                                 if (($currentSecret['profile'] ?? null) !== $limitedProfile) {
                                     $this->routerOs->setPppProfile($router, $customer->pppoe_username, $limitedProfile);
                                     $this->routerOs->disconnectPppActive($router, $customer->pppoe_username);
+                                    $this->rememberSecretProfile($secretMaps, $routerId, $customer->pppoe_username, $limitedProfile);
                                 }
                             }
                         } catch (Throwable $exception) {
@@ -198,6 +206,19 @@ class FupService
             });
 
         return $count;
+    }
+
+    private function rememberSecretProfile(array &$secretMaps, int|string $routerId, string $username, string $profile): void
+    {
+        if (!isset($secretMaps[$routerId]) || !$secretMaps[$routerId] instanceof \Illuminate\Support\Collection) {
+            return;
+        }
+
+        $current = $secretMaps[$routerId]->get($username, []);
+        $secretMaps[$routerId]->put($username, array_merge(
+            is_array($current) ? $current : [],
+            ['name' => $username, 'profile' => $profile],
+        ));
     }
 
     private function restoreExpiredPeriodLimits(string $period): void
