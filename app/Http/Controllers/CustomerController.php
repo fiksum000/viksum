@@ -773,9 +773,16 @@ class CustomerController extends Controller
             $data['pppoe_profile_normal'] = $selectedPackage->normal_profile;
             $data['fup_speed_after'] = $selectedPackage->fup_speed_after;
         }
-        $data['portal_password'] = filled($data['portal_password'] ?? null)
-            ? $data['portal_password']
-            : CustomerIdentity::newPortalPassword();
+        if (filled($data['portal_password'] ?? null)) {
+            // The admin explicitly supplied a replacement portal password.
+            $data['portal_password'] = $data['portal_password'];
+        } elseif ($creating) {
+            // Generate and show the initial portal credential only on customer creation.
+            $data['portal_password'] = CustomerIdentity::newPortalPassword();
+        } else {
+            // An empty field on edit means “keep the existing portal password”.
+            unset($data['portal_password']);
+        }
 
         $fupMode = $data['fup_mode'];
         unset($data['fup_mode']);
