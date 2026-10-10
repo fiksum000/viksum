@@ -100,7 +100,18 @@
                     @if($c->live_connection_status==='unknown')<div class="small text-muted mt-1">Router tidak dapat dibaca</div>@endif
                 </td>
                 <td>@if(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='online')<span class="badge rounded-pill bg-secondary-subtle text-light border border-secondary-subtle" data-customer-traffic-id="{{$c->id}}" aria-label="Menunggu sampel trafik">Mengukur…</span>@elseif(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='offline')<span class="small text-muted">Offline</span>@elseif(in_array($c->service_type,['pppoe','hotspot'],true) && $c->live_connection_status==='unknown')<span class="small text-muted">Tidak diketahui</span>@else<span class="small text-muted">—</span>@endif</td>
-                <td class="text-nowrap text-center">@if(in_array($billingUser?->role,['super_admin','admin','operator'],true))<a href="{{route('customers.edit',$c)}}" class="btn btn-sm btn-outline-secondary">Edit</a>@endif</td>
+                <td class="text-nowrap text-center">
+                    @if(in_array($billingUser?->role,['super_admin','admin','operator'],true))
+                        <a href="{{route('customers.edit',$c)}}" class="btn btn-sm btn-outline-secondary">Edit</a>
+                    @endif
+                    @if(in_array($billingUser?->role,['super_admin','admin'],true))
+                        <form method="POST" action="{{route('customers.destroy',$c)}}" class="d-inline" onsubmit="return confirm('Hapus permanen pelanggan {{$c->customer_code}} — {{$c->name}}? Riwayat tagihan akan membuat penghapusan ditolak. Akun MikroTik hanya dihapus jika kepemilikannya dapat diverifikasi.');">
+                            @csrf
+                            @method('DELETE')
+                            <button type="submit" class="btn btn-sm btn-outline-danger">Hapus</button>
+                        </form>
+                    @endif
+                </td>
             </tr>
         @empty
             <tr><td colspan="11" class="text-center p-4">Belum ada pelanggan.</td></tr>
