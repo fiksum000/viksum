@@ -215,7 +215,7 @@ class CustomerController extends Controller
             if ($previousServiceType === 'hotspot' && $previousRouter && $previousHotspotUsername
                 && ($customer->service_type !== 'hotspot' || $previousRouter->id !== $customer->router_id)) {
                 $routerOs->disconnectHotspotActive($previousRouter, $previousHotspotUsername);
-                $routerOs->deleteHotspotUser($previousRouter, $previousHotspotUsername);
+                $routerOs->deleteManagedHotspotUser($previousRouter, $previousHotspotUsername, 'Billing customer '.$customer->customer_code);
             }
 
             $feedbackKey = 'success';
@@ -269,7 +269,7 @@ class CustomerController extends Controller
 
         if ($customer->status === 'trial') {
             if (filled($previousUsername)) {
-                $routerOs->setHotspotUserEnabled($customer->router, $previousUsername, false);
+                $routerOs->setManagedHotspotUserEnabled($customer->router, $previousUsername, false, 'Billing customer '.$customer->customer_code);
                 $routerOs->disconnectHotspotActive($customer->router, $previousUsername);
             }
             return;
@@ -304,6 +304,7 @@ class CustomerController extends Controller
             'Billing customer '.$customer->customer_code,
             $previousUsername,
             $active,
+            'Billing customer '.$customer->customer_code,
         );
 
         if (! $active) {
