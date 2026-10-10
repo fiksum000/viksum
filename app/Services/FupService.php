@@ -31,6 +31,7 @@ class FupService
         $count = 0;
         $period = $this->currentPeriod();
         $activeMaps = [];
+        $secretMaps = [];
 
         // Recover a previous month's limited sessions as soon as the collection worker
         // runs after rollover, rather than depending only on the separate reset schedule.
@@ -69,6 +70,16 @@ class FupService
                             $activeMaps[$routerId] = $this->routerOs->activePppMap($router);
                         }
                         $activeMap = $activeMaps[$routerId];
+
+                        if (!array_key_exists($routerId, $secretMaps)) {
+                            try {
+                                $secretMaps[$routerId] = collect($this->routerOs->listPppSecrets($router))
+                                    ->keyBy(fn (array $secret) => (string) ($secret['name'] ?? ''));
+                            } catch (Throwable $exception) {
+                                report($exception);
+                                $secretMaps[$routerId] = collect();
+                            }
+                        }
                     } catch (Throwable $exception) {
                         report($exception);
                         continue;
@@ -163,6 +174,17 @@ class FupService
                                     $limitedProfile,
                                     'Batas FUP paket/pelanggan tercapai',
                                 );
+                            }
+
+                            // Re-apply the FUP profile if another workflow (for example
+                            // unisolation) returned the secret to normal while FUP is still due.
+                            if ($state->limited && $fupEnabled && $limit > 0
+                                && $newTotal >= $limit && filled($limitedProfile)) {
+                                $currentSecret = $secretMaps[$routerId]->get($customer->pppoe_username);
+                                if (($currentSecret['profile'] ?? null) !== $limitedProfile) {
+                                    $this->routerOs->setPppProfile($router, $customer->pppoe_username, $limitedProfile);
+                                    $this->routerOs->disconnectPppActive($router, $customer->pppoe_username);
+                                }
                             }
                         } catch (Throwable $exception) {
                             // A problem with one secret must not stop FUP for the rest of the router.
