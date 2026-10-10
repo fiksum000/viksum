@@ -47,14 +47,13 @@ class HotspotVoucherLifecycleTest extends TestCase
         $this->loginAdmin();
 
         $routerOs = Mockery::mock(RouterOsService::class);
-        $routerOs->shouldReceive('disconnectHotspotActive')
-            ->once()->ordered()
-            ->withArgs(fn ($actualRouter, $username) =>
-                $actualRouter->id === $router->id && $username === $voucher->username);
-        $routerOs->shouldReceive('deleteHotspotUser')
-            ->once()->ordered()
-            ->withArgs(fn ($actualRouter, $username) =>
-                $actualRouter->id === $router->id && $username === $voucher->username);
+        $routerOs->shouldReceive('deleteManagedHotspotUser')
+            ->once()
+            ->withArgs(fn ($actualRouter, $username, $expectedComment) =>
+                $actualRouter->id === $router->id
+                && $username === $voucher->username
+                && $expectedComment === 'Billing voucher')
+            ->andReturn(true);
         $this->app->instance(RouterOsService::class, $routerOs);
 
         $this->withSession(['user_id' => User::where('email', 'admin@example.test')->value('id')])
