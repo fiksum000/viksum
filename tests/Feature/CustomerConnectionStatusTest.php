@@ -97,6 +97,31 @@ class CustomerConnectionStatusTest extends TestCase
         $this->assertDatabaseHas('invoices', ['customer_id' => $customer->id, 'status' => 'paid']);
     }
 
+    public function test_live_customer_cannot_be_permanently_deleted_before_termination(): void
+    {
+        $router = Router::query()->create([
+            'name' => 'Protected active customer router',
+            'host' => '192.0.2.24',
+            'port' => 8728,
+            'username' => 'test-user',
+            'password' => 'test-password',
+        ]);
+        $customer = $this->customer($router, 'ppp-active-protected', 'Active customer must be terminated first', 'active');
+
+        $routerOs = Mockery::mock(RouterOsService::class);
+        $routerOs->shouldNotReceive('findPppSecret');
+        $routerOs->shouldNotReceive('deletePppSecret');
+        $routerOs->shouldNotReceive('deleteManagedHotspotUser');
+        $this->app->instance(RouterOsService::class, $routerOs);
+        $this->loginAdmin();
+
+        $this->delete(route('customers.destroy', $customer))
+            ->assertRedirect(route('customers.index'))
+            ->assertSessionHas('warning', 'Hentikan layanan pelanggan terlebih dahulu sebelum menghapus permanen. Pelanggan aktif atau terisolir tidak dihapus langsung.');
+
+        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'status' => 'active']);
+    }
+
     public function test_customer_without_invoice_history_can_be_deleted_after_router_account_cleanup(): void
     {
         $router = Router::query()->create([
