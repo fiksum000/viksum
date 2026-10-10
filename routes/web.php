@@ -109,6 +109,7 @@ Route::middleware('auth.session')->group(function (): void {
         Route::get('/reports/export', [ReportsController::class, 'export'])->name('reports.export');
         Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
         Route::get('/invoice-notifications', [InvoiceNotificationController::class, 'index'])->name('invoices.notifications');
+        Route::post('/invoice-notifications/{notification}/retry', [InvoiceNotificationController::class, 'retry'])->middleware('role:super_admin,admin')->name('invoices.notifications.retry');
         Route::get('/invoices/archive', [InvoiceArchiveController::class, 'download'])->name('invoices.archive');
         Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
         Route::get('/invoices/{invoice}/pdf', InvoicePdfController::class)->name('invoices.pdf');
