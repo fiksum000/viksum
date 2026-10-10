@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Customer;
+use App\Models\Invoice;
+use App\Models\Payment;
 use App\Services\TripayService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
