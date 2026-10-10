@@ -273,6 +273,11 @@ class CustomerController extends Controller
 
         try {
             $router = $customer->router;
+            $hasRouterAccount = ($customer->service_type === 'pppoe' && filled($customer->pppoe_username))
+                || ($customer->service_type === 'hotspot' && filled($customer->hotspot_username));
+            if ($hasRouterAccount && !$router) {
+                throw new RuntimeException('Router pelanggan tidak ditemukan di billing. Pulihkan data router terlebih dahulu agar akun MikroTik tidak tertinggal.');
+            }
             if ($router) {
                 if (!$router->enabled && (
                     ($customer->service_type === 'pppoe' && filled($customer->pppoe_username))
