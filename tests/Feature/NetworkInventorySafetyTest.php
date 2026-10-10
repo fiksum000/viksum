@@ -58,7 +58,8 @@ class NetworkInventorySafetyTest extends TestCase
             ->get(route('routers.index'))
             ->assertOk()
             ->assertSee('Edit data router')
-            ->assertSee('router-host-'.$router->id);
+            ->assertSee('router-host-'.$router->id)
+            ->assertSee('Penghapusan ditolak jika masih dipakai pelanggan, paket, profil, atau voucher.');
 
         $this->withSession(['user_id' => $admin->id])
             ->put(route('routers.update', $router), [
