@@ -245,6 +245,90 @@ class CustomerController extends Controller
         return redirect()->route('customers.edit', $customer)->with($feedbackKey, $message);
     }
 
+    public function destroy(Customer $customer, RouterOsService $routerOs)
+    {
+        // Financial history is immutable: use the terminated status for former customers.
+        if ($customer->invoices()->exists()) {
+            return redirect()->route('customers.index')
+                ->with('warning', 'Pelanggan memiliki riwayat tagihan. Jangan hapus permanen; buka Edit lalu ubah status menjadi Berhenti agar riwayat keuangan tetap aman.');
+        }
+
+        try {
+            $router = $customer->router;
+            if ($router) {
+                if (!$router->enabled && (
+                    ($customer->service_type === 'pppoe' && filled($customer->pppoe_username))
+                    || ($customer->service_type === 'hotspot' && filled($customer->hotspot_username))
+                )) {
+                    throw new RuntimeException('Router pelanggan sedang dinonaktifkan. Aktifkan router agar akun layanan dapat diperiksa dan dibersihkan sebelum data dihapus.');
+                }
+
+                if ($router->enabled && $customer->service_type === 'pppoe' && filled($customer->pppoe_username)) {
+                    $matches = collect($routerOs->findPppSecret($router, $customer->pppoe_username))
+                        ->filter(fn (array $row) => ($row['name'] ?? null) === $customer->pppoe_username)
+                        ->values();
+
+                    if ($matches->count() > 1) {
+                        throw new RuntimeException('Username PPP ditemukan lebih dari satu kali di MikroTik. Penghapusan dibatalkan demi keamanan.');
+                    }
+
+                    if ($matches->isNotEmpty()) {
+                        $secret = $matches->first();
+                        $package = $customer->package;
+                        $allowedProfiles = array_filter([
+                            $package?->normal_profile,
+                            $package?->fup_speed_after,
+                            $customer->pppoe_profile_normal,
+                            $customer->pppoe_profile_isolir,
+                            $customer->fup_speed_after,
+                            config('billing.isolation_profile'),
+                        ]);
+                        if (isset($secret['service']) && $secret['service'] !== 'pppoe') {
+                            throw new RuntimeException('Akun dengan username yang sama bukan secret PPPoE; tidak dihapus.');
+                        }
+                        if (!in_array((string) ($secret['profile'] ?? ''), $allowedProfiles, true)) {
+                            throw new RuntimeException('Profil secret PPP tidak cocok dengan profil pelanggan yang dikenal. Periksa akun di MikroTik sebelum menghapus data billing.');
+                        }
+
+                        $routerOs->disconnectPppActive($router, $customer->pppoe_username);
+                        $routerOs->deletePppSecret($router, $customer->pppoe_username);
+                    }
+                }
+
+                if ($router->enabled && $customer->service_type === 'hotspot' && filled($customer->hotspot_username)) {
+                    // The RouterOS ownership comment must match this billing record.
+                    $routerOs->deleteManagedHotspotUser(
+                        $router,
+                        $customer->hotspot_username,
+                        'Billing customer '.$customer->customer_code,
+                    );
+                }
+            }
+
+            DB::transaction(function () use ($customer): void {
+                Onu::query()->where('customer_id', $customer->id)->update(['customer_id' => null]);
+                FupState::query()->where('customer_id', $customer->id)->delete();
+                $customer->delete();
+            });
+
+            Audit::log('customer.deleted', Customer::class, $customer->id, [
+                'code' => $customer->customer_code,
+                'service_type' => $customer->service_type,
+            ]);
+
+            return redirect()->route('customers.index')->with('success', 'Pelanggan dihapus. Akun layanan yang dikelola billing sudah dibersihkan dari MikroTik.');
+        } catch (\\Throwable $exception) {
+            Log::warning('Customer deletion blocked or failed', [
+                'customer_id' => $customer->id,
+                'router_id' => $customer->router_id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return redirect()->route('customers.index')
+                ->with('warning', 'Pelanggan belum dihapus: '.$exception->getMessage());
+        }
+    }
+
     private function syncPppSecret(Customer $customer, RouterOsService $routerOs, ?string $previousUsername = null): void
     {
         if ($customer->service_type !== 'pppoe') {
