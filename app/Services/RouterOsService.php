@@ -92,7 +92,7 @@ class RouterOsService {
     $onLogin = $this->managedHotspotOnLoginScript($profile->bind_mac);
     $this->upsertHotspotRouterProfile(
       $client,
-      $profile->name,
+      $profile->routerProfileName(),
       $profile->upload_speed.'/'.$profile->download_speed,
       $profile->shared_users,
       $onLogin,
@@ -101,7 +101,7 @@ class RouterOsService {
     if ($profile->fup_limit_bytes > 0 && filled($profile->fup_upload_speed) && filled($profile->fup_download_speed)) {
       $this->upsertHotspotRouterProfile(
         $client,
-        $profile->name.'-FUP',
+        $profile->routerProfileName().'-FUP',
         $profile->fup_upload_speed.'/'.$profile->fup_download_speed,
         $profile->shared_users,
         $onLogin,
@@ -165,7 +165,7 @@ class RouterOsService {
     }
 
     $client = $this->client($router);
-    $names = [$profile->name, $profile->name.'-FUP'];
+    $names = [$profile->routerProfileName(), $profile->routerProfileName().'-FUP'];
     $users = $client->query('/ip/hotspot/user/print')->read();
     foreach ($users as $user) {
       if (in_array($user['profile'] ?? null, $names, true)) {
