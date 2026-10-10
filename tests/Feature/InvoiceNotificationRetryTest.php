@@ -24,11 +24,13 @@ class InvoiceNotificationRetryTest extends TestCase
         $notification = $this->notification($invoice, 'billing_reminder', 'failed', now()->toDateString());
         $this->configureFonnte();
 
-        $this->withSession(['user_id' => $admin->id])
+        $response = $this->withSession(['user_id' => $admin->id])
             ->from(route('invoices.notifications', ['status' => 'failed']))
-            ->post(route('invoices.notifications.retry', $notification))
-            ->assertRedirect(route('invoices.notifications', ['status' => 'failed']))
-            ->assertSessionHas('success');
+            ->post(route('invoices.notifications.retry', $notification));
+
+        $response->assertRedirect(route('invoices.notifications', ['status' => 'failed']));
+        $flash = array_intersect_key($response->getSession()->all(), array_flip(['success', 'warning', 'error', 'info']));
+        $this->assertArrayHasKey('success', $flash, 'Unexpected retry response: '.json_encode($flash));
 
         $this->assertSame('queued', $notification->fresh()->status);
         Queue::assertPushed(SendWhatsAppMessage::class, fn (SendWhatsAppMessage $job) =>
