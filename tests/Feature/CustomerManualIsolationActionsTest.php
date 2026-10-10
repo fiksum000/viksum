@@ -42,6 +42,23 @@ class CustomerManualIsolationActionsTest extends TestCase
             ->assertSessionHas('success');
     }
 
+    public function test_manual_isolation_does_not_expose_raw_router_exception_to_browser(): void
+    {
+        $admin = $this->loginAdmin();
+        $customer = $this->customer('active');
+
+        $isolation = Mockery::mock(IsolationService::class);
+        $isolation->shouldReceive('isolate')->once()
+            ->andThrow(new \\RuntimeException('sensitive-router-host-and-api-details'));
+        $this->app->instance(IsolationService::class, $isolation);
+
+        $this->withSession(['user_id' => $admin->id])
+            ->post(route('customers.isolate', $customer))
+            ->assertRedirect(route('customers.show', $customer))
+            ->assertSessionHas('warning', 'Pelanggan belum diisolir. Periksa koneksi router dan log aplikasi.')
+            ->assertSessionMissing('error');
+    }
+
     public function test_manual_unisolation_route_calls_service_and_returns_feedback(): void
     {
         $admin = $this->loginAdmin();
