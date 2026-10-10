@@ -38,7 +38,7 @@ class HotspotController extends Controller
         // Validate once before the batch so a typo cannot create partial batches.
         try {
             $routerOs->assertHotspotProfileExists($router, $data['profile']);
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             report($exception);
             return back()->withInput()->with('error', 'Profil Hotspot tidak ditemukan atau router tidak dapat diakses. Periksa nama profil dan koneksi RouterOS.');
         }
@@ -64,14 +64,14 @@ class HotspotController extends Controller
                 $created++;
                 $pendingUsername = null;
             }
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             report($exception);
             // Best effort cleanup if RouterOS created the account but the local row failed.
             if ($pendingUsername !== null) {
                 try {
                     $routerOs->disconnectHotspotActive($router, $pendingUsername);
                     $routerOs->deleteHotspotUser($router, $pendingUsername);
-                } catch (\\Throwable $cleanupException) {
+                } catch (\Throwable $cleanupException) {
                     report($cleanupException);
                 }
             }
