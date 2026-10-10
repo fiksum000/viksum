@@ -133,6 +133,7 @@ class CustomerHotspotSyncTest extends TestCase
         return Package::query()->create([
             'name' => 'Hotspot Basic',
             'price' => 80000,
+            'normal_profile' => 'default',
         ]);
     }
 
