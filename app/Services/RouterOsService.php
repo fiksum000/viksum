@@ -298,6 +298,7 @@ class RouterOsService {
     string $comment = '',
     ?string $previousUsername = null,
     bool $enabled = true,
+    ?string $expectedPreviousComment = null,
   ): void {
     $client = $this->client($router);
     $profiles = $client->query('/ip/hotspot/user/profile/print')->read();
@@ -313,6 +314,17 @@ class RouterOsService {
 
     if ($target && (! $previous || ($target['.id'] ?? null) !== ($previous['.id'] ?? null))) {
       throw new RuntimeException("Username Hotspot '{$username}' sudah ada di MikroTik dan tidak cocok dengan akun pelanggan ini.");
+    }
+
+    if ($previous) {
+      $actualComment = (string) ($previous['comment'] ?? '');
+      $commentMatches = $expectedPreviousComment !== null
+        && ($actualComment === $expectedPreviousComment
+          || (str_starts_with($expectedPreviousComment, 'VIKSUM:V:')
+            && str_starts_with($actualComment, $expectedPreviousComment.'|FIRST=')));
+      if (! $commentMatches) {
+        throw new RuntimeException("Akun Hotspot lama '{$previousUsername}' tidak memiliki penanda kepemilikan yang cocok; akun tidak diubah.");
+      }
     }
 
     $query = new Query($previous ? '/ip/hotspot/user/set' : '/ip/hotspot/user/add');
@@ -359,6 +371,37 @@ class RouterOsService {
         $client->query((new Query('/ip/hotspot/active/remove'))->equal('.id', $row['.id']))->read();
       }
     }
+  }
+
+  /**
+   * Delete only a RouterOS user whose comment proves ownership by this billing
+   * record. Returns false if the router account is already absent.
+   */
+  public function deleteManagedHotspotUser(Router $router, string $username, string $expectedComment): bool
+  {
+    $client = $this->client($router);
+    $rows = $client->query((new Query('/ip/hotspot/user/print'))->where('name', $username))->read();
+    $matches = collect($rows)->filter(fn (array $row) => ($row['name'] ?? null) === $username)->values();
+
+    if ($matches->isEmpty()) {
+      return false;
+    }
+    if ($matches->count() !== 1 || ! isset($matches[0]['.id'])) {
+      throw new RuntimeException("Akun Hotspot '{$username}' tidak ditemukan secara unik; penghapusan dibatalkan.");
+    }
+
+    $actualComment = (string) ($matches[0]['comment'] ?? '');
+    $owned = $actualComment === $expectedComment
+      || (str_starts_with($expectedComment, 'VIKSUM:V:')
+        && str_starts_with($actualComment, $expectedComment.'|FIRST='));
+    if (! $owned) {
+      throw new RuntimeException("Akun Hotspot '{$username}' tidak memiliki penanda kepemilikan yang cocok; akun tidak dihapus.");
+    }
+
+    $this->disconnectHotspotActive($router, $username);
+    $client->query((new Query('/ip/hotspot/user/remove'))->equal('.id', $matches[0]['.id']))->read();
+
+    return true;
   }
 
   public function deleteHotspotUser(Router $router, string $username): void
