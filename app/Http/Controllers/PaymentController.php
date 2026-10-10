@@ -20,7 +20,7 @@ class PaymentController
 
         $paid = DB::transaction(function () use ($invoice, $data): bool {
             $lockedInvoice = Invoice::whereKey($invoice->id)->lockForUpdate()->firstOrFail();
-            if ($lockedInvoice->status === 'paid') {
+            if ($lockedInvoice->status !== 'unpaid') {
                 return false;
             }
 
@@ -38,7 +38,7 @@ class PaymentController
         });
 
         if (!$paid) {
-            return back()->with('error', 'Invoice sudah lunas.');
+            return back()->with('error', 'Invoice tidak berstatus belum dibayar atau sudah diproses.');
         }
 
         try {
