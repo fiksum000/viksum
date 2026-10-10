@@ -56,7 +56,7 @@ class PaymentActivationSafetyTest extends TestCase
         config(['billing.timezone' => 'Asia/Jakarta', 'billing.grace_days' => 0]);
         Carbon::setTestNow(Carbon::parse('2026-10-10 12:00:00', 'Asia/Jakarta'));
         $customer = $this->customer('has-other-overdue-invoice', 'isolated');
-        $paidInvoice = $this->invoice($customer, 'paid', 'INV-PAID');
+        $paidInvoice = $this->invoice($customer, 'paid', 'INV-PAID', '2026-09-20', '2026-09');
         $this->invoice($customer, 'unpaid', 'INV-OVERDUE', Carbon::parse('2026-10-08', 'Asia/Jakarta')->toDateString());
 
         $isolation = Mockery::mock(IsolationService::class);
@@ -108,13 +108,13 @@ class PaymentActivationSafetyTest extends TestCase
         ]);
     }
 
-    private function invoice(Customer $customer, string $status, string $number, ?string $dueDate = null): Invoice
+    private function invoice(Customer $customer, string $status, string $number, ?string $dueDate = null, string $period = '2026-10'): Invoice
     {
         return Invoice::query()->create([
             'invoice_number' => $number,
             'public_token' => bin2hex(random_bytes(24)),
             'customer_id' => $customer->id,
-            'period' => '2026-10',
+            'period' => $period,
             'issued_at' => '2026-10-01',
             'due_date' => $dueDate ?? '2026-10-20',
             'subtotal' => 100000,
