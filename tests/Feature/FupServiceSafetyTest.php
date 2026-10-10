@@ -142,7 +142,8 @@ class FupServiceSafetyTest extends TestCase
             });
         $routerOs->shouldReceive('disconnectPppActive')
             ->once()
-            ->with($router, 'fup-active-user');
+            ->withArgs(fn (Router $actualRouter, string $username) =>
+                $actualRouter->id === $router->id && $username === 'fup-active-user');
         $this->app->instance(RouterOsService::class, $routerOs);
 
         app(FupService::class)->collect();
