@@ -216,6 +216,20 @@ class CustomerController extends Controller
         return redirect()->route('customers.edit', $customer)->with($feedbackKey, $message);
     }
 
+    public function destroy(Customer $customer)
+    {
+        DB::transaction(function () use ($customer): void {
+            // Release the ONT record for future assignment; retain billing history.
+            Onu::where('customer_id', $customer->id)->update(['customer_id' => null]);
+            $customer->delete();
+        });
+
+        Audit::log('customer.archived', Customer::class, $customer->id);
+
+        return redirect()->route('customers.index')
+            ->with('success', 'Pelanggan diarsipkan dari daftar. Riwayat tagihan tetap tersimpan; konfigurasi MikroTik tidak diubah.');
+    }
+
     private function syncPppSecret(Customer $customer, RouterOsService $routerOs, ?string $previousUsername = null): void
     {
         if ($customer->service_type !== 'pppoe' || $customer->status === 'trial') {
