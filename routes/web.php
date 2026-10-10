@@ -44,6 +44,7 @@ Route::middleware('auth.session')->group(function (): void {
         Route::post('/customers/{customer}/actions/unisolate', [CustomerController::class, 'unisolate'])->name('customers.unisolate');
         Route::patch('/customers/{customer}/terminate', [CustomerController::class, 'terminate'])->name('customers.terminate');
         Route::delete('/customers/{customer}', [CustomerController::class, 'destroy'])->middleware('role:super_admin,admin')->name('customers.destroy');
+        Route::post('/customers/{customer}/portal-password/reset', [CustomerController::class, 'resetPortalPassword'])->middleware('throttle:5,1')->name('customers.portal-password.reset');
         Route::post('/customers/import', [CustomerImportExportController::class, 'import'])->middleware('role:super_admin,admin')->name('customers.import');
     });
 
