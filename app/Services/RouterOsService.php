@@ -307,8 +307,15 @@ class RouterOsService {
     }
 
     $users = $client->query('/ip/hotspot/user/print')->read();
-    $findByName = fn (string $candidate) => collect($users)
-      ->first(fn (array $row) => ($row['name'] ?? null) === $candidate);
+    $findByName = function (string $candidate) use ($users): ?array {
+      $matches = collect($users)
+        ->filter(fn (array $row) => ($row['name'] ?? null) === $candidate)
+        ->values();
+      if ($matches->count() > 1) {
+        throw new RuntimeException("Username Hotspot '{$candidate}' ditemukan lebih dari satu kali pada router.");
+      }
+      return $matches->first();
+    };
     $target = $findByName($username);
     $previous = filled($previousUsername) ? $findByName($previousUsername) : null;
 
