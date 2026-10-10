@@ -3,6 +3,7 @@ namespace App\Http\Controllers;
 
 use App\Models\{Customer, FupState, HotspotProfile, Onu, Package, Router};
 use App\Services\FupService;
+use App\Services\IsolationService;
 use App\Services\RouterOsService;
 
 use App\Services\CustomerQueryService;
@@ -189,7 +190,7 @@ class CustomerController extends Controller
 
             return redirect()->route('customers.show', $customer)
                 ->with('success', 'Pelanggan berhasil diisolir dan sesi aktif diputus.');
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             Log::warning('Manual customer isolation failed', [
                 'customer_id' => $customer->id,
                 'router_id' => $customer->router_id,
@@ -214,7 +215,7 @@ class CustomerController extends Controller
 
             return redirect()->route('customers.show', $customer)
                 ->with('success', 'Isolir dibuka. Profil normal atau FUP yang sesuai telah dipulihkan.');
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             Log::warning('Manual customer unisolation failed', [
                 'customer_id' => $customer->id,
                 'router_id' => $customer->router_id,
