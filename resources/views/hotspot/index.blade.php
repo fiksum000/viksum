@@ -381,6 +381,12 @@
                             @if($voucher->hotspot_profile_id)
                                 <form method="POST" action="{{ route('hotspot.vouchers.sync', $voucher) }}">@csrf<button class="btn btn-sm btn-outline-info">Sinkron ulang</button></form>
                             @endif
+                            @if($voucher->hotspotProfile && $voucher->hotspotProfile->enabled && $voucher->hotspotProfile->validity_value && $voucher->hotspotProfile->validity_unit && (!$voucher->hotspotProfile->starts_on_first_login || $voucher->first_login_at))
+                                <form method="POST" action="{{ route('hotspot.vouchers.renew', $voucher) }}" onsubmit="return confirm('Perpanjang masa berlaku voucher ini? Voucher aktif yang belum kedaluwarsa akan diperpanjang dari tanggal kedaluwarsa saat ini. Pemakaian data dan FUP tidak direset.')">
+                                    @csrf
+                                    <button class="btn btn-sm btn-outline-success" type="submit">Perpanjang</button>
+                                </form>
+                            @endif
                             <form method="POST" action="{{ route('hotspot.toggle', $voucher) }}">@csrf @method('PATCH')
                                 <button class="btn btn-sm btn-outline-warning" @disabled($voucher->status === 'expired')>{{ $voucher->status === 'active' ? 'Nonaktifkan' : 'Aktifkan' }}</button>
                             </form>
