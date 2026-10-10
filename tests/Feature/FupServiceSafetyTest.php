@@ -31,6 +31,7 @@ class FupServiceSafetyTest extends TestCase
 
         $routerOs = Mockery::mock(RouterOsService::class);
         $routerOs->shouldNotReceive('setPppProfile');
+        $routerOs->shouldNotReceive('setPppProfileIfCurrentProfile');
         $routerOs->shouldNotReceive('disconnectPppActive');
         $routerOs->shouldNotReceive('activePppMap');
         $this->app->instance(RouterOsService::class, $routerOs);
@@ -50,6 +51,7 @@ class FupServiceSafetyTest extends TestCase
 
         $routerOs = Mockery::mock(RouterOsService::class);
         $routerOs->shouldNotReceive('setPppProfile');
+        $routerOs->shouldNotReceive('setPppProfileIfCurrentProfile');
         $routerOs->shouldNotReceive('disconnectPppActive');
         $this->app->instance(RouterOsService::class, $routerOs);
 
@@ -135,15 +137,19 @@ class FupServiceSafetyTest extends TestCase
                 'profile' => $package->normal_profile,
             ]]);
         $profileChanges = [];
-        $routerOs->shouldReceive('setPppProfile')
+        $routerOs->shouldReceive('setPppProfileIfCurrentProfile')
             ->once()
-            ->andReturnUsing(function (Router $actualRouter, string $username, string $profile) use (&$profileChanges): void {
+            ->withArgs(fn (Router $actualRouter, string $username, array $expected, string $profile) =>
+                $actualRouter->id === $router->id
+                && $username === 'fup-active-user'
+                && in_array($package->normal_profile, $expected, true)
+                && $profile === $package->fup_speed_after)
+            ->andReturnUsing(function (Router $actualRouter, string $username, array $expected, string $profile) use (&$profileChanges): bool {
                 $profileChanges[] = [$actualRouter->id, $username, $profile];
+                return true;
             });
-        $routerOs->shouldReceive('disconnectPppActive')
-            ->once()
-            ->withArgs(fn (Router $actualRouter, string $username) =>
-                $actualRouter->id === $router->id && $username === 'fup-active-user');
+        $routerOs->shouldNotReceive('setPppProfile');
+        $routerOs->shouldNotReceive('disconnectPppActive');
         $this->app->instance(RouterOsService::class, $routerOs);
 
         app(FupService::class)->collect();
