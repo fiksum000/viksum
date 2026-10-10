@@ -61,6 +61,7 @@ Route::middleware('auth.session')->group(function (): void {
         Route::put('/whatsapp/templates/{template}', [WaTemplateController::class, 'update'])->name('whatsapp.templates.update');
         Route::post('/whatsapp/broadcast', [BroadcastController::class, 'send'])->middleware('throttle:5,1')->name('whatsapp.broadcast');
         Route::get('/payment-settings', [PaymentSettingsController::class, 'index'])->name('payment-settings.index');
+        Route::post('/payment-settings/check-tripay', [PaymentSettingsController::class, 'checkTripay'])->middleware('throttle:5,1')->name('payment-settings.check-tripay');
         Route::put('/payment-settings', [PaymentSettingsController::class, 'update'])->name('payment-settings.update');
         Route::get('/packages', [PackageController::class, 'index'])->name('packages.index');
         Route::post('/packages', [PackageController::class, 'store'])->name('packages.store');
