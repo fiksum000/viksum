@@ -94,7 +94,9 @@ class InvoiceNotificationController
         }
 
         try {
-            $queued = $notifications->queue($invoice, $event, $target, $message, $variables, $scheduledFor, $oncePerInvoice);
+            // Re-queue this exact failed notification row. Do not synthesize a new
+            // idempotency key: that could silently target a different notification.
+            $queued = $notifications->retryFailed($notification, $target, $message, $variables);
         } catch (\Throwable $exception) {
             report($exception);
             return back()->with('error', 'Notifikasi belum masuk antrean. Periksa koneksi WhatsApp dan worker, lalu coba lagi.');
