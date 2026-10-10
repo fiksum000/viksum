@@ -191,7 +191,8 @@ class CustomerController extends Controller
         Audit::log('customer.updated', Customer::class, $customer->id);
 
         try {
-            $previousUsernameOnSelectedRouter = $previousRouter?->id === $customer->router_id
+            $previousUsernameOnSelectedRouter = $previousServiceType === 'pppoe'
+                && $previousRouter?->id === $customer->router_id
                 ? $previousUsername
                 : null;
             $this->syncPppSecret($customer, $routerOs, $previousUsernameOnSelectedRouter);
@@ -261,17 +262,18 @@ class CustomerController extends Controller
             return;
         }
 
-        if (! $customer->router_id || ! $customer->router) {
-            throw new RuntimeException('Pilih router MikroTik untuk layanan Hotspot.');
-        }
-
-        // A trial account should not remain usable on the router.
+        // A trial account should not remain usable on the router. New trial
+        // customers have no existing RouterOS account to modify.
         if ($customer->status === 'trial') {
-            if (filled($previousUsername)) {
+            if (filled($previousUsername) && $customer->router) {
                 $routerOs->setHotspotUserEnabled($customer->router, $previousUsername, false);
                 $routerOs->disconnectHotspotActive($customer->router, $previousUsername);
             }
             return;
+        }
+
+        if (! $customer->router_id || ! $customer->router) {
+            throw new RuntimeException('Pilih router MikroTik untuk layanan Hotspot.');
         }
 
         if (blank($customer->hotspot_username) || blank($customer->hotspot_password)) {
