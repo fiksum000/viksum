@@ -3,6 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Router;
+use App\Models\Customer;
+use App\Models\HotspotProfile;
+use App\Models\HotspotVoucher;
+use App\Models\Package;
 use App\Services\RouterOsService;
 use App\Support\IsolationScript;
 use Illuminate\Http\Request;
