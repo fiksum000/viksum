@@ -59,6 +59,30 @@ class InvoiceNotificationRetryTest extends TestCase
         $this->assertSame('failed', $notification->fresh()->status);
     }
 
+    public function test_h_minus_one_warning_can_only_be_retried_on_the_original_warning_day(): void
+    {
+        Queue::fake();
+        $admin = $this->user('admin');
+        $invoice = $this->invoice('unpaid');
+        $today = now(config('billing.timezone'))->startOfDay();
+        $invoice->update(['due_date' => $today->copy()->subDays(2)->toDateString()]);
+        $notification = $this->notification($invoice, 'isolation_warning', 'failed', $today->toDateString());
+        $this->configureFonnte();
+
+        $this->withSession(['user_id' => $admin->id])
+            ->from(route('invoices.notifications', ['status' => 'failed']))
+            ->post(route('invoices.notifications.retry', $notification))
+            ->assertRedirect(route('invoices.notifications', ['status' => 'failed']))
+            ->assertSessionHas('success');
+
+        $this->assertSame('queued', $notification->fresh()->status);
+        Queue::assertPushed(SendWhatsAppMessage::class, fn (SendWhatsAppMessage $job) =>
+            $job->billingNotificationId === $notification->id
+            && $job->event === 'isolation_warning'
+            && $job->variables['isolation_date'] === $today->copy()->addDay()->format('d-m-Y')
+        );
+    }
+
     public function test_admin_can_retry_failed_payment_success_notice_once_for_a_paid_invoice(): void
     {
         Queue::fake();
