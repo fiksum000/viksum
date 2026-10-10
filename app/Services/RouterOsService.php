@@ -181,6 +181,33 @@ class RouterOsService {
       $rateLimit .= ' '.$rateLimit.' '.$rateLimit.' 1s/1s '.(int) $package->priority;
     }
 
+    $hasFup = (bool) $package->fup_enabled;
+    if ($hasFup && ((int) $package->fup_limit_bytes <= 0
+      || blank($package->fup_upload_speed)
+      || blank($package->fup_download_speed))) {
+      throw new RuntimeException('FUP aktif tetapi batas GB atau kecepatan upload/download FUP belum lengkap.');
+    }
+
+    // Verify ownership of every profile that will be written before changing
+    // any profile. A collision on the FUP name must not leave a half-updated package.
+    $profileOwners = [
+      $package->routerProfileName() => 'VIKSUM:PACKAGE:'.$package->id.':NORMAL',
+    ];
+    if ($hasFup) {
+      $profileOwners[$package->routerFupProfileName()] = 'VIKSUM:PACKAGE:'.$package->id.':FUP';
+    }
+    $existingProfiles = collect($this->client($router)->query('/ppp/profile/print')->read());
+    foreach ($profileOwners as $name => $ownerComment) {
+      $matches = $existingProfiles->filter(fn (array $row) => ($row['name'] ?? null) === $name)->values();
+      if ($matches->count() > 1) {
+        throw new RuntimeException("Profil PPP '{$name}' ditemukan lebih dari sekali; sinkronisasi dibatalkan.");
+      }
+      if ($matches->isNotEmpty()
+        && (($matches[0]['comment'] ?? '') !== $ownerComment || ! isset($matches[0]['.id']))) {
+        throw new RuntimeException("Nama profil PPP '{$name}' sudah dipakai profil lain. Tidak ada profil yang diubah.");
+      }
+    }
+
     $changed = $this->upsertManagedPppProfile(
       $router,
       $package->routerProfileName(),
@@ -188,13 +215,7 @@ class RouterOsService {
       'VIKSUM:PACKAGE:'.$package->id.':NORMAL',
     );
 
-    if ($package->fup_enabled) {
-      if ((int) $package->fup_limit_bytes <= 0
-        || blank($package->fup_upload_speed)
-        || blank($package->fup_download_speed)) {
-        throw new RuntimeException('FUP aktif tetapi batas GB atau kecepatan upload/download FUP belum lengkap.');
-      }
-
+    if ($hasFup) {
       $changed = $this->upsertManagedPppProfile(
         $router,
         $package->routerFupProfileName(),
