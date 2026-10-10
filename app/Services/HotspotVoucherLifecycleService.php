@@ -168,17 +168,28 @@ class HotspotVoucherLifecycleService
         ]);
         $voucher->refresh();
 
-        if ($voucher->status !== 'active' || $voucher->fup_applied) {
-            return;
-        }
-
         /** @var HotspotProfile|null $profile */
         $profile = $voucher->hotspotProfile;
-        if (! $profile || (int) $profile->fup_limit_bytes <= 0 || $total < (int) $profile->fup_limit_bytes) {
+        if (! $profile) {
             return;
         }
 
-        if (blank($profile->fup_upload_speed) || blank($profile->fup_download_speed)) {
+        $limit = (int) $profile->fup_limit_bytes;
+        $hasFupProfile = $limit > 0
+            && filled($profile->fup_upload_speed)
+            && filled($profile->fup_download_speed);
+        $shouldBeLimited = $hasFupProfile && $total >= $limit;
+
+        // If a profile's FUP policy changes in billing, reconcile existing vouchers
+        // instead of leaving them permanently assigned to an outdated speed profile.
+        if ($voucher->fup_applied && ! $shouldBeLimited) {
+            $this->routerOs->setHotspotUserProfile($router, $voucher->username, $profile->routerProfileName());
+            $this->routerOs->disconnectHotspotActive($router, $voucher->username);
+            $voucher->update(['fup_applied' => false]);
+            return;
+        }
+
+        if ($voucher->status !== 'active' || $voucher->fup_applied || ! $shouldBeLimited) {
             return;
         }
 
