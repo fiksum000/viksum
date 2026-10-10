@@ -501,7 +501,7 @@ class CustomerController extends Controller
         $selectedPackage = Package::findOrFail($data['package_id']);
         if ($service === 'pppoe' && ($data['fup_mode'] ?? 'inherit') === 'on'
             && (!$selectedPackage->fup_enabled || (int) $selectedPackage->fup_limit_bytes <= 0 || blank($selectedPackage->fup_speed_after))) {
-            throw \\Illuminate\\Validation\\ValidationException::withMessages([
+            throw \Illuminate\Validation\ValidationException::withMessages([
                 'fup_mode' => 'FUP pelanggan memerlukan paket dengan batas kuota dan profil FUP yang sudah dikonfigurasi. Atur FUP pada menu Paket PPPoE terlebih dahulu.',
             ]);
         }
