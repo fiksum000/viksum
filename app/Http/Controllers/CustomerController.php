@@ -1,7 +1,7 @@
 <?php
 namespace App\Http\Controllers;
 
-use App\Models\{Customer, FupState, Onu, Package, Router};
+use App\Models\{Customer, FupState, HotspotProfile, Onu, Package, Router};
 use App\Services\FupService;
 use App\Services\RouterOsService;
 
