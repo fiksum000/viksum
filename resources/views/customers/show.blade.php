@@ -38,12 +38,12 @@
     </div>
 </div>
 
-@if(session('portal_password_created'))
+@if($portalPasswordCreated)
     <section class="alert alert-success" role="status">
         <div class="fw-semibold mb-1">Password portal berhasil dibuat ulang.</div>
         <p class="mb-2">Salin password sekarang. Password hanya ditampilkan pada halaman ini satu kali; data yang tersimpan di billing tetap berupa hash.</p>
         <div class="input-group" style="max-width:420px">
-            <input id="portal-password-created" class="form-control" value="{{ session('portal_password_created') }}" readonly aria-label="Password portal baru">
+            <input id="portal-password-created" class="form-control" value="{{ $portalPasswordCreated }}" readonly aria-label="Password portal baru">
             <button type="button" class="btn btn-outline-light" onclick="navigator.clipboard.writeText(document.getElementById('portal-password-created').value).then(()=>this.textContent='Tersalin').catch(()=>document.getElementById('portal-password-created').select())">Salin password</button>
         </div>
     </section>
