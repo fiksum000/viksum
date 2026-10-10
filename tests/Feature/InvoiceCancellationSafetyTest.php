@@ -57,6 +57,26 @@ class InvoiceCancellationSafetyTest extends TestCase
         $this->assertDatabaseHas('invoices', ['id' => $invoice->id, 'status' => 'unpaid']);
     }
 
+    public function test_invoice_with_stale_checkout_metadata_cannot_be_cancelled(): void
+    {
+        $invoice = $this->invoice('unpaid');
+        $invoice->update([
+            'payment_url' => 'https://example.test/pay',
+            'payment_reference' => 'STALE-'.bin2hex(random_bytes(4)),
+        ]);
+        $this->loginAdmin();
+
+        $this->post(route('invoices.cancel', $invoice))
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $this->assertDatabaseHas('invoices', [
+            'id' => $invoice->id,
+            'status' => 'unpaid',
+            'payment_url' => 'https://example.test/pay',
+        ]);
+    }
+
     public function test_paid_invoice_cannot_be_cancelled(): void
     {
         $invoice = $this->invoice('paid');
@@ -89,8 +109,6 @@ class InvoiceCancellationSafetyTest extends TestCase
             'subtotal' => 100000,
             'total' => 100000,
             'status' => $status,
-            'payment_url' => 'https://example.test/pay',
-            'payment_reference' => 'STALE-'.bin2hex(random_bytes(4)),
         ]);
     }
 
