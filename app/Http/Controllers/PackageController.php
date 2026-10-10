@@ -174,7 +174,12 @@ class PackageController extends Controller
             $oldNormal = $customer->pppoe_profile_normal;
             $oldFup = $customer->fup_speed_after;
 
-            // Update the billing mapping for every customer, including isolated users.
+            if (!$customer->router || (int) $customer->router_id !== (int) $package->router_id) {
+                $errors[] = $customer->customer_code.' ('.$customer->pppoe_username.'): router pelanggan berbeda dari router paket; pemetaan pelanggan tidak diubah.';
+                continue;
+            }
+
+            // Update the billing mapping for every customer on this package router, including isolated users.
             // Router assignment for inactive users is deliberately left untouched.
             $customer->update([
                 'pppoe_profile_normal' => $package->routerProfileName(),
