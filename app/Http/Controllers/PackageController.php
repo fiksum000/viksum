@@ -186,6 +186,8 @@ class PackageController extends Controller
                 ->where('period', $period)
                 ->first();
 
+            $effectiveFupLimit = max(0, (int) ($customer->fup_limit_bytes ?: $package->fup_limit_bytes ?: 0));
+
             if ($customer->status !== 'active' || !$customer->router || !$customer->pppoe_username) {
                 if ((!$package->fup_enabled || $customer->fup_override === false) && $state?->limited) {
                     $state->update(['limited' => false]);
@@ -202,7 +204,12 @@ class PackageController extends Controller
                 $oldFup,
             ], fn ($value) => is_string($value) && $value !== '')));
 
-            $targetProfile = $package->fup_enabled && $customer->fup_override !== false && $state?->limited
+            $shouldApplyFup = $package->fup_enabled
+                && $customer->fup_override !== false
+                && $state?->limited
+                && $effectiveFupLimit > 0
+                && (int) $state->total_bytes >= $effectiveFupLimit;
+            $targetProfile = $shouldApplyFup
                 ? $package->routerFupProfileName()
                 : $package->routerProfileName();
 
@@ -220,7 +227,7 @@ class PackageController extends Controller
                     $routerOs->disconnectPppActive($customer->router, $customer->pppoe_username);
                 }
 
-                if (!$package->fup_enabled && $state?->limited) {
+                if ($state?->limited && !$shouldApplyFup) {
                     DB::table('fup_logs')->insert([
                         'customer_id' => $customer->id,
                         'period' => $period,
