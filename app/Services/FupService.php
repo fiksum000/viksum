@@ -210,7 +210,7 @@ class FupService
 
     private function rememberSecretProfile(array &$secretMaps, int|string $routerId, string $username, string $profile): void
     {
-        if (!isset($secretMaps[$routerId]) || !$secretMaps[$routerId] instanceof \Illuminate\Support\Collection) {
+        if (!isset($secretMaps[$routerId]) || !($secretMaps[$routerId] instanceof \Illuminate\Support\Collection)) {
             return;
         }
 
