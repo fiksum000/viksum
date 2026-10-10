@@ -55,7 +55,6 @@ class InvoiceNotificationController
             'amount' => $amount,
         ];
         $scheduledFor = $notification->scheduled_for;
-        $oncePerInvoice = false;
 
         if ($event === 'billing_reminder') {
             if ($invoice->status !== 'unpaid' || ! $dueDate) {
@@ -85,7 +84,6 @@ class InvoiceNotificationController
                 return back()->with('error', 'Kunci idempotensi notifikasi pembayaran tidak sesuai; hubungi administrator sebelum mencoba lagi.');
             }
             $message = "Yth. {$customer->name}, pembayaran invoice {$invoice->invoice_number} sebesar Rp {$amount} telah kami terima. Terima kasih. ID pelanggan: {$customer->customer_code}. Username layanan: {$serviceUsername}. Portal pelanggan: ".route('portal.login')." (ID login: {$customer->customer_code}).";
-            $oncePerInvoice = true;
         } else {
             if ($customer->status !== 'isolated' || $invoice->status !== 'unpaid') {
                 return back()->with('warning', 'Pesan isolir tidak dikirim ulang karena status layanan atau invoice sudah berubah.');
