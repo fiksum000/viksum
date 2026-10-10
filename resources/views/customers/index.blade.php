@@ -111,7 +111,7 @@
                         <form method="POST" action="{{route('customers.destroy',$c)}}" class="d-inline" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Hapus permanen pelanggan {{ $c->customer_code }} — {{ $c->name }}? Hanya pelanggan Berhenti atau Uji coba tanpa riwayat tagihan yang dapat dihapus. Akun MikroTik harus berhasil dibersihkan lebih dahulu.">
                             @csrf
                             @method('DELETE')
-                            <button type="submit" class="btn btn-sm btn-outline-danger" @disabled(!in_array($c->status, ['terminated', 'trial'], true)) title="{{ in_array($c->status, ['terminated', 'trial'], true) ? 'Pelanggan memenuhi syarat untuk diperiksa sebelum dihapus.' : 'Hentikan layanan terlebih dahulu sebelum menghapus permanen.' }}">Hapus</button>
+                            <button type="submit" class="btn btn-sm btn-outline-danger" @disabled(!in_array($c->status, ['terminated', 'trial'], true) || (bool) $c->invoices_exists) title="{{ (bool) $c->invoices_exists ? 'Pelanggan memiliki riwayat tagihan; jangan hapus permanen.' : (in_array($c->status, ['terminated', 'trial'], true) ? 'Pelanggan memenuhi syarat untuk diperiksa sebelum dihapus.' : 'Hentikan layanan terlebih dahulu sebelum menghapus permanen.') }}">Hapus</button>
                         </form>
                     @endif
                 </td>
