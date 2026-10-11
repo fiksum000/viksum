@@ -3,9 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Router;
+use App\Models\Customer;
+use App\Models\HotspotProfile;
+use App\Models\HotspotVoucher;
+use App\Models\Package;
 use App\Services\RouterOsService;
 use App\Support\IsolationScript;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class RouterController extends Controller
 {
@@ -27,7 +32,7 @@ class RouterController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
-            'host' => ['required', 'string', 'max:255'],
+            'host' => ['required', 'string', 'max:255', Rule::unique('routers', 'host')->where(fn ($query) => $query->where('port', (int) $request->input('port')))],
             'port' => ['required', 'integer', 'min:1', 'max:65535'],
             'username' => ['required', 'string', 'max:100'],
             'password' => ['required', 'string'],
@@ -46,7 +51,7 @@ class RouterController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
-            'host' => ['required', 'string', 'max:255'],
+            'host' => ['required', 'string', 'max:255', Rule::unique('routers', 'host')->where(fn ($query) => $query->where('port', (int) $request->input('port')))->ignore($router->id)],
             'port' => ['required', 'integer', 'min:1', 'max:65535'],
             'username' => ['required', 'string', 'max:100'],
             'password' => ['nullable', 'string'],
@@ -88,8 +93,17 @@ class RouterController extends Controller
 
     public function destroy(Router $router)
     {
+        $inUse = Customer::where('router_id', $router->id)->exists()
+            || Package::where('router_id', $router->id)->exists()
+            || HotspotProfile::where('router_id', $router->id)->exists()
+            || HotspotVoucher::where('router_id', $router->id)->exists();
+
+        if ($inUse) {
+            return back()->with('warning', 'Router masih dipakai pelanggan, paket, profil, atau voucher. Pindahkan data atau hapus relasinya terlebih dahulu.');
+        }
+
         $router->delete();
 
-        return back()->with('success', 'Router dihapus.');
+        return back()->with('success', 'Router yang tidak memiliki relasi layanan berhasil dihapus.');
     }
 }

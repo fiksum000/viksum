@@ -5,6 +5,7 @@ Schedule::command('billing:fup-reset')->monthlyOn(10,'00:20')->withoutOverlappin
 Schedule::command('billing:isolate-overdue')->dailyAt('01:00')->withoutOverlapping();
 Schedule::command('billing:warn-isolation')->dailyAt('07:50')->withoutOverlapping();
 Schedule::command('billing:fup-collect')->everyFiveMinutes()->withoutOverlapping(4);
+Schedule::command('billing:hotspot-maintain')->everyMinute()->withoutOverlapping(5);
 Schedule::command('billing:check-routers')->everyTenMinutes()->withoutOverlapping(5);
 Schedule::command('billing:reminders 7')->dailyAt('08:00')->withoutOverlapping();
 Schedule::command('billing:reminders 3')->dailyAt('08:10')->withoutOverlapping();

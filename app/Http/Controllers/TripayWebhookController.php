@@ -82,12 +82,19 @@ class TripayWebhookController
                     throw new \RuntimeException('Invoice not found');
                 }
 
+                if ($invoice->status === 'cancelled') {
+                    throw new \RuntimeException('Invoice has been cancelled; callback requires manual reconciliation');
+                }
+
                 $amount = (int) ($data['total_amount'] ?? 0);
                 if ($amount !== (int) $invoice->total) {
                     throw new \RuntimeException('Callback amount does not match invoice total');
                 }
 
                 $payment = Payment::where('reference', $reference)->lockForUpdate()->first();
+                if ($invoice->status === 'paid' && (!$payment || $payment->invoice_id !== $invoice->id || $payment->provider !== 'tripay' || $payment->status !== 'paid')) {
+                    throw new \RuntimeException('Invoice already settled through another method; callback requires manual reconciliation');
+                }
                 if ($payment && $payment->invoice_id !== $invoice->id) {
                     throw new \RuntimeException('Payment reference belongs to another invoice');
                 }

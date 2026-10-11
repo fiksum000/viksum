@@ -30,6 +30,7 @@ Route::middleware('auth.session')->group(function (): void {
     Route::middleware('role:super_admin,admin,operator,technician')->group(function (): void {
         Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
         Route::get('/customers/traffic', CustomerTrafficController::class)->middleware('throttle:30,1')->name('customers.traffic');
+        Route::get('/customers/{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->name('customers.show');
     });
 
     Route::get('/customers/export', [CustomerImportExportController::class, 'export'])->middleware('role:super_admin,admin,finance')->name('customers.export');
@@ -39,10 +40,16 @@ Route::middleware('auth.session')->group(function (): void {
         Route::post('/customers', [CustomerController::class, 'store'])->name('customers.store');
         Route::get('/customers/{customer}/edit', [CustomerController::class, 'edit'])->name('customers.edit');
         Route::put('/customers/{customer}', [CustomerController::class, 'update'])->name('customers.update');
+        Route::post('/customers/{customer}/actions/sync', [CustomerController::class, 'syncToRouter'])->name('customers.sync');
+        Route::post('/customers/{customer}/actions/isolate', [CustomerController::class, 'isolate'])->name('customers.isolate');
+        Route::post('/customers/{customer}/actions/unisolate', [CustomerController::class, 'unisolate'])->name('customers.unisolate');
+        Route::patch('/customers/{customer}/terminate', [CustomerController::class, 'terminate'])->name('customers.terminate');
+        Route::delete('/customers/{customer}', [CustomerController::class, 'destroy'])->middleware('role:super_admin,admin')->name('customers.destroy');
         Route::post('/customers/import', [CustomerImportExportController::class, 'import'])->middleware('role:super_admin,admin')->name('customers.import');
     });
 
     Route::middleware('role:super_admin,admin')->group(function (): void {
+        Route::post('/customers/{customer}/portal-password/reset', [CustomerController::class, 'resetPortalPassword'])->middleware(['role:super_admin,admin', 'throttle:5,1'])->name('customers.portal-password.reset');
         Route::get('/users', [UserController::class, 'index'])->name('users.index');
         Route::post('/users', [UserController::class, 'store'])->name('users.store');
         Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
@@ -56,10 +63,12 @@ Route::middleware('auth.session')->group(function (): void {
         Route::put('/whatsapp/templates/{template}', [WaTemplateController::class, 'update'])->name('whatsapp.templates.update');
         Route::post('/whatsapp/broadcast', [BroadcastController::class, 'send'])->middleware('throttle:5,1')->name('whatsapp.broadcast');
         Route::get('/payment-settings', [PaymentSettingsController::class, 'index'])->name('payment-settings.index');
+        Route::post('/payment-settings/check-tripay', [PaymentSettingsController::class, 'checkTripay'])->middleware('throttle:5,1')->name('payment-settings.check-tripay');
         Route::put('/payment-settings', [PaymentSettingsController::class, 'update'])->name('payment-settings.update');
         Route::get('/packages', [PackageController::class, 'index'])->name('packages.index');
         Route::post('/packages', [PackageController::class, 'store'])->name('packages.store');
         Route::put('/packages/{package}', [PackageController::class, 'update'])->name('packages.update');
+        Route::post('/packages/{package}/sync', [PackageController::class, 'sync'])->name('packages.sync');
         Route::delete('/packages/{package}', [PackageController::class, 'destroy'])->name('packages.destroy');
         Route::post('/routers', [RouterController::class, 'store'])->name('routers.store');
         Route::put('/routers/{router}', [RouterController::class, 'update'])->name('routers.update');
@@ -85,6 +94,12 @@ Route::middleware('auth.session')->group(function (): void {
         Route::post('/onus', [OnuController::class, 'store'])->name('onus.store');
         Route::put('/onus/{onu}', [OnuController::class, 'update'])->name('onus.update');
         Route::delete('/onus/{onu}', [OnuController::class, 'destroy'])->name('onus.destroy');
+        Route::post('/hotspot/profiles', [HotspotController::class, 'profileStore'])->name('hotspot.profiles.store');
+        Route::put('/hotspot/profiles/{hotspotProfile}', [HotspotController::class, 'profileUpdate'])->name('hotspot.profiles.update');
+        Route::post('/hotspot/profiles/{hotspotProfile}/sync', [HotspotController::class, 'profileSync'])->name('hotspot.profiles.sync');
+        Route::delete('/hotspot/profiles/{hotspotProfile}', [HotspotController::class, 'profileDestroy'])->name('hotspot.profiles.destroy');
+        Route::post('/hotspot/vouchers/{voucher}/sync', [HotspotController::class, 'syncVoucher'])->name('hotspot.vouchers.sync');
+        Route::post('/hotspot/vouchers/{voucher}/renew', [HotspotController::class, 'renew'])->name('hotspot.vouchers.renew');
         Route::post('/hotspot/vouchers', [HotspotController::class, 'generate'])->name('hotspot.generate');
         Route::patch('/hotspot/vouchers/{voucher}', [HotspotController::class, 'toggle'])->name('hotspot.toggle');
         Route::delete('/hotspot/vouchers/{voucher}', [HotspotController::class, 'destroy'])->name('hotspot.destroy');
@@ -96,15 +111,18 @@ Route::middleware('auth.session')->group(function (): void {
         Route::get('/reports/export', [ReportsController::class, 'export'])->name('reports.export');
         Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
         Route::get('/invoice-notifications', [InvoiceNotificationController::class, 'index'])->name('invoices.notifications');
+        Route::post('/invoice-notifications/{notification}/retry', [InvoiceNotificationController::class, 'retry'])->middleware('role:super_admin,admin')->name('invoices.notifications.retry');
         Route::get('/invoices/archive', [InvoiceArchiveController::class, 'download'])->name('invoices.archive');
         Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
         Route::get('/invoices/{invoice}/pdf', InvoicePdfController::class)->name('invoices.pdf');
         Route::get('/invoices/{invoice}/pdf/download', [InvoicePdfController::class, 'download'])->name('invoices.pdf.download');
         Route::post('/invoices/generate', [InvoiceController::class, 'generate'])->middleware('role:super_admin,admin')->name('invoices.generate');
         Route::post('/invoices/{invoice}/pay', [InvoiceController::class, 'pay'])->name('invoices.pay');
+        Route::post('/invoices/{invoice}/retry-activation', [InvoiceController::class, 'retryActivation'])->middleware('role:super_admin,admin')->name('invoices.retry-activation');
         Route::post('/invoices/{invoice}/remind', [InvoiceController::class, 'remind'])->middleware('throttle:5,1')->name('invoices.remind');
         Route::put('/invoices/{invoice}/adjustments', [InvoiceController::class, 'adjust'])->name('invoices.adjust');
         Route::post('/invoices/{invoice}/manual-payment', [PaymentController::class, 'manual'])->name('invoices.manual-payment');
+        Route::post('/invoices/{invoice}/cancel', [InvoiceController::class, 'cancel'])->middleware('role:super_admin,admin')->name('invoices.cancel');
     });
 });
 

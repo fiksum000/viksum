@@ -8,6 +8,7 @@ use App\Models\Invoice;
 use Carbon\CarbonInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class BillingNotificationService
@@ -23,6 +24,60 @@ class BillingNotificationService
         if (! $notification->wasRecentlyCreated && $notification->status !== 'sent') {
             $notification->update(['status' => 'failed', 'last_error' => mb_substr($reason, 0, 1000)]);
         }
+    }
+
+    /**
+     * Retry an existing failed notification by its primary key.
+     * This avoids creating a duplicate notification when the saved date key or
+     * a concurrent worker makes the generic idempotent queue lookup ambiguous.
+     */
+    public function retryFailed(
+        BillingNotification $notification,
+        string $target,
+        string $message,
+        array $variables = [],
+    ): bool {
+        $retry = DB::transaction(function () use ($notification): ?array {
+            $locked = BillingNotification::query()->whereKey($notification->id)->lockForUpdate()->first();
+            if (! $locked || $locked->status !== 'failed') {
+                return null;
+            }
+
+            $locked->update(['status' => 'queued', 'last_error' => null]);
+
+            return [
+                'id' => $locked->id,
+                'customer_id' => $locked->customer_id,
+                'event' => $locked->event,
+            ];
+        });
+
+        if (! $retry) {
+            return false;
+        }
+
+        try {
+            SendWhatsAppMessage::dispatch(
+                $retry['customer_id'],
+                $target,
+                $message,
+                $retry['event'],
+                $variables,
+                $retry['id'],
+            );
+        } catch (Throwable $exception) {
+            BillingNotification::query()->whereKey($retry['id'])->update([
+                'status' => 'failed',
+                'last_error' => mb_substr($exception->getMessage(), 0, 1000),
+            ]);
+            Log::error('Failed to re-queue billing WhatsApp notification', [
+                'billing_notification_id' => $retry['id'],
+                'exception' => $exception->getMessage(),
+            ]);
+            throw $exception;
+        }
+
+        return true;
     }
 
     /**
