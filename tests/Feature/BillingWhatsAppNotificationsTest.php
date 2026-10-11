@@ -36,6 +36,13 @@ class BillingWhatsAppNotificationsTest extends TestCase
             && $job->variables['portal_username'] === $firstCustomer->customer_code
             && $job->variables['pppoe_username'] === 'ppp-first'
             && $job->variables['portal_url'] === route('portal.login')
+            && $job->variables['invoice_code'] === $first->invoice_number
+            && $job->variables['profile_name'] === 'PPPOE'
+            && $job->variables['user_code'] === $firstCustomer->customer_code
+            && $job->variables['next_bill'] === 'Rp 100.000'
+            && $job->variables['expired_at'] === now(config('billing.timezone'))->addDay()->format('d-m-Y')
+            && $job->variables['link_payment'] === route('public.pay', $first->public_token)
+            && str_contains($job->message, 'Tagihan Baru')
         );
         $this->assertDatabaseCount('billing_notifications', 2);
         $this->assertDatabaseHas('billing_notifications', ['invoice_id' => $first->id, 'event' => 'billing_reminder']);
