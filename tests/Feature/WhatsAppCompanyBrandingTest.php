@@ -96,7 +96,7 @@ class WhatsAppCompanyBrandingTest extends TestCase
         WaTemplate::query()->create([
             'event' => 'billing_reminder',
             'name' => 'Tagihan Baru',
-            'body' => "Invoice No: {invoice_code}\\nProduct: {profile_name}\\nStatus: Belum Dibayar\\nDevice: {name} - {user_code}\\nJumlah Tagihan: {next_bill}\\nTanggal Jatuh Tempo: {expired_at}\\n{link_payment}",
+            'body' => "Invoice No: {invoice_code}\nProduct: {profile_name}\nStatus: Belum Dibayar\nDevice: {name} - {user_code}\nJumlah Tagihan: {next_bill}\nTanggal Jatuh Tempo: {expired_at}\n{link_payment}",
             'enabled' => true,
         ]);
         Http::fake([
@@ -114,7 +114,7 @@ class WhatsAppCompanyBrandingTest extends TestCase
         ]);
 
         Http::assertSent(fn (Request $request): bool =>
-            $request->data()['message'] === "Invoice No: INV-2026-001\\nProduct: Internet 20 Mbps\\nStatus: Belum Dibayar\\nDevice: Pelanggan Uji - CUS-001\\nJumlah Tagihan: Rp 200.000\\nTanggal Jatuh Tempo: 20-10-2026\\nhttps://billing.example.test/pay/example-token"
+            $request->data()['message'] === "Invoice No: INV-2026-001\nProduct: Internet 20 Mbps\nStatus: Belum Dibayar\nDevice: Pelanggan Uji - CUS-001\nJumlah Tagihan: Rp 200.000\nTanggal Jatuh Tempo: 20-10-2026\nhttps://billing.example.test/pay/example-token"
         );
     }
 
