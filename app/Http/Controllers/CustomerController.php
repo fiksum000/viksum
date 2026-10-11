@@ -563,7 +563,7 @@ class CustomerController extends Controller
 
             return redirect()->route('customers.index')
                 ->with('success', 'Pelanggan diarsipkan dari daftar aktif. Riwayat invoice dan pembayaran tetap tersimpan; konfigurasi MikroTik tidak diubah.');
-        } catch (\\Throwable $exception) {
+        } catch (\Throwable $exception) {
             Log::warning('Customer archive failed', [
                 'customer_id' => $customer->id,
                 'error' => $exception->getMessage(),
