@@ -42,16 +42,9 @@ return new class extends Migration
             'updated_at' => $now,
         ];
 
-        if (DB::table('wa_templates')->where('event', 'billing_reminder')->exists()) {
-            // Apply the format requested by the owner, but preserve the enabled/disabled setting.
-            DB::table('wa_templates')->where('event', 'billing_reminder')->update($values);
-        } else {
-            DB::table('wa_templates')->insert($values + [
-                'event' => 'billing_reminder',
-                'enabled' => true,
-                'created_at' => $now,
-            ]);
-        }
+        // Update only an existing row; template creation for fresh installs belongs to the seeder.
+        // Preserve the operator's enabled/disabled preference.
+        DB::table('wa_templates')->where('event', 'billing_reminder')->update($values);
     }
 
     public function down(): void
