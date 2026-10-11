@@ -655,7 +655,8 @@ class CustomerController extends Controller
             DB::transaction(function () use ($customer): void {
                 Onu::query()->where('customer_id', $customer->id)->update(['customer_id' => null]);
                 FupState::query()->where('customer_id', $customer->id)->delete();
-                $customer->delete();
+                // Keep this guarded endpoint as true permanent deletion; archiving uses delete().
+                $customer->forceDelete();
             });
 
             Audit::log('customer.deleted', Customer::class, $customer->id, [
