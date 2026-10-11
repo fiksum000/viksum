@@ -97,7 +97,9 @@ class FonnteService
         if ($template) {
             $replacements = [];
             foreach ($variables as $key => $value) {
-                $replacements['{{'.$key.'}}'] = (string) $value;
+                $value = (string) $value;
+                $replacements['{{'.$key.'}}'] = $value;
+                $replacements['{'.$key.'}'] = $value;
             }
             $message = strtr($template->body, $replacements);
         }

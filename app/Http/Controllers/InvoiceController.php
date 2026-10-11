@@ -152,35 +152,23 @@ class InvoiceController
             return back()->with('error', 'Pengingat hanya dapat dikirim untuk invoice yang belum lunas.');
         }
 
-        $invoice->loadMissing('customer');
+        $invoice->loadMissing(['customer.package', 'customer.hotspotProfile']);
         $target = $invoice->customer?->whatsapp_number ?: $invoice->customer?->phone;
         if (! $target) {
             $notifications->recordFailure($invoice, 'billing_reminder', now(config('billing.timezone')), 'Nomor WhatsApp pelanggan belum diisi.');
             return back()->with('error', 'Nomor WhatsApp pelanggan belum diisi.');
         }
 
-        $amount = number_format((int) $invoice->total, 0, ',', '.');
-        $dueDate = $invoice->due_date->format('d-m-Y');
-        $paymentUrl = $invoice->payment_url ?: route('public.pay', $invoice->public_token);
         $customer = $invoice->customer;
-        $serviceUsername = $customer->service_type === 'pppoe' ? $customer->pppoe_username : $customer->hotspot_username;
+        [$message, $variables] = $notifications->billingReminderPayload($invoice, $customer, 'manual');
 
         try {
-            $queued = $notifications->queue($invoice, 'billing_reminder', $target,
-                "Yth. {$customer->name}, kami mengingatkan tagihan {$invoice->invoice_number} sebesar Rp {$amount} yang jatuh tempo pada {$dueDate}. ID pelanggan: {$customer->customer_code}. Username layanan: {$serviceUsername}. Silakan bayar melalui {$paymentUrl}. Portal pelanggan: ".route('portal.login')." (ID login: {$customer->customer_code}). Terima kasih.",
-                [
-                    'name' => $customer->name,
-                    'customer_code' => $customer->customer_code,
-                    'portal_username' => $customer->customer_code,
-                    'service_username' => $serviceUsername,
-                    'pppoe_username' => $customer->pppoe_username,
-                    'portal_url' => route('portal.login'),
-                    'invoice_number' => $invoice->invoice_number,
-                    'amount' => $amount,
-                    'due_date' => $dueDate,
-                    'payment_url' => $paymentUrl,
-                    'days_offset' => 'manual',
-                ],
+            $queued = $notifications->queue(
+                $invoice,
+                'billing_reminder',
+                $target,
+                $message,
+                $variables,
                 now(config('billing.timezone')),
             );
         } catch (\Throwable $exception) {
