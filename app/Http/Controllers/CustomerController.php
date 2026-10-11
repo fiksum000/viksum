@@ -539,6 +539,41 @@ class CustomerController extends Controller
         }
     }
 
+    public function archive(Customer $customer)
+    {
+        // Archiving only hides a service that has already been explicitly stopped.
+        // It must never be a shortcut around RouterOS disconnection/disable checks.
+        if ($customer->status !== 'terminated') {
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Hentikan layanan terlebih dahulu melalui aksi Hentikan Layanan sebelum mengarsipkan pelanggan.');
+        }
+
+        try {
+            DB::transaction(function () use ($customer): void {
+                // Make the ONU available for another customer while preserving invoice
+                // and payment history. The terminated RouterOS account is not modified here.
+                Onu::query()->where('customer_id', $customer->id)->update(['customer_id' => null]);
+                $customer->delete();
+            });
+
+            Audit::log('customer.archived', Customer::class, $customer->id, [
+                'code' => $customer->customer_code,
+                'status' => $customer->status,
+            ]);
+
+            return redirect()->route('customers.index')
+                ->with('success', 'Pelanggan diarsipkan dari daftar aktif. Riwayat invoice dan pembayaran tetap tersimpan; konfigurasi MikroTik tidak diubah.');
+        } catch (\Throwable $exception) {
+            Log::warning('Customer archive failed', [
+                'customer_id' => $customer->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return redirect()->route('customers.show', $customer)
+                ->with('warning', 'Pelanggan belum dapat diarsipkan. Periksa log aplikasi dan coba kembali.');
+        }
+    }
+
     public function destroy(Customer $customer, RouterOsService $routerOs)
     {
         // Never permanently delete a live/suspended service directly from the list.
@@ -620,7 +655,8 @@ class CustomerController extends Controller
             DB::transaction(function () use ($customer): void {
                 Onu::query()->where('customer_id', $customer->id)->update(['customer_id' => null]);
                 FupState::query()->where('customer_id', $customer->id)->delete();
-                $customer->delete();
+                // Keep this guarded endpoint as true permanent deletion; archiving uses delete().
+                $customer->forceDelete();
             });
 
             Audit::log('customer.deleted', Customer::class, $customer->id, [

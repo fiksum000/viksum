@@ -107,6 +107,12 @@
                     @if(in_array($billingUser?->role,['super_admin','admin','operator'],true))
                         <a href="{{route('customers.edit',$c)}}" class="btn btn-sm btn-outline-secondary">Edit</a>
                     @endif
+                    @if($c->status === 'terminated' && in_array($billingUser?->role,['super_admin','admin','operator'],true))
+                        <form method="POST" action="{{route('customers.archive',$c)}}" class="d-inline" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Arsipkan pelanggan {{ $c->customer_code }} — {{ $c->name }}? Layanan harus sudah dihentikan. Riwayat invoice tetap tersimpan dan akun MikroTik tidak diubah.">
+                            @csrf
+                            <button type="submit" class="btn btn-sm btn-outline-warning">Arsipkan</button>
+                        </form>
+                    @endif
                     @if(in_array($billingUser?->role,['super_admin','admin'],true))
                         <form method="POST" action="{{route('customers.destroy',$c)}}" class="d-inline" onsubmit="return confirm(this.dataset.confirm)" data-confirm="Hapus permanen pelanggan {{ $c->customer_code }} — {{ $c->name }}? Hanya pelanggan Berhenti atau Uji coba tanpa riwayat tagihan yang dapat dihapus. Akun MikroTik harus berhasil dibersihkan lebih dahulu.">
                             @csrf
