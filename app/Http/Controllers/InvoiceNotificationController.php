@@ -26,7 +26,7 @@ class InvoiceNotificationController
             return back()->with('error', 'Koneksi WhatsApp belum aktif. Periksa pengaturan Fonnte sebelum mencoba kirim ulang.');
         }
 
-        $notification->loadMissing(['customer', 'invoice.customer']);
+        $notification->loadMissing(['customer.package', 'customer.hotspotProfile', 'invoice.customer.package', 'invoice.customer.hotspotProfile']);
         $invoice = $notification->invoice;
         $customer = $notification->customer ?: $invoice?->customer;
         if (! $invoice || ! $customer) {
@@ -60,8 +60,10 @@ class InvoiceNotificationController
             if ($invoice->status !== 'unpaid' || ! $dueDate) {
                 return back()->with('warning', 'Pengingat tidak dikirim ulang karena invoice sudah bukan belum lunas atau tanggal jatuh tempo tidak tersedia.');
             }
-            $variables += ['due_date' => $dueDate->format('d-m-Y'), 'payment_url' => $paymentUrl, 'days_offset' => (string) $scheduledFor?->diffInDays($dueDate, false)];
-            $message = "Yth. {$customer->name}, kami mengingatkan tagihan {$invoice->invoice_number} sebesar Rp {$amount} yang jatuh tempo pada {$dueDate->format('d-m-Y')}. ID pelanggan: {$customer->customer_code}. Username layanan: {$serviceUsername}. Silakan lakukan pembayaran melalui {$paymentUrl}. Portal pelanggan: ".route('portal.login')." (ID login: {$customer->customer_code}). Terima kasih.";
+            $daysOffset = $scheduledFor && $dueDate
+                ? (string) $scheduledFor->diffInDays($dueDate, false)
+                : 'manual';
+            [$message, $variables] = $notifications->billingReminderPayload($invoice, $customer, $daysOffset);
         } elseif ($event === 'isolation_warning') {
             if ($invoice->status !== 'unpaid' || ! $dueDate || $customer->status !== 'active' || ! $customer->is_auto_isolate) {
                 return back()->with('warning', 'Peringatan isolir tidak dikirim ulang karena tagihan atau status layanan sudah berubah.');
