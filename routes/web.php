@@ -44,6 +44,7 @@ Route::middleware('auth.session')->group(function (): void {
         Route::post('/customers/{customer}/actions/isolate', [CustomerController::class, 'isolate'])->name('customers.isolate');
         Route::post('/customers/{customer}/actions/unisolate', [CustomerController::class, 'unisolate'])->name('customers.unisolate');
         Route::patch('/customers/{customer}/terminate', [CustomerController::class, 'terminate'])->name('customers.terminate');
+        Route::post('/customers/{customer}/archive', [CustomerController::class, 'archive'])->name('customers.archive');
         Route::delete('/customers/{customer}', [CustomerController::class, 'destroy'])->middleware('role:super_admin,admin')->name('customers.destroy');
         Route::post('/customers/import', [CustomerImportExportController::class, 'import'])->middleware('role:super_admin,admin')->name('customers.import');
     });
